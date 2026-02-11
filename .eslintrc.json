@@ -1,0 +1,50 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "parser": "@typescript-eslint/parser",
+  "extends": [
+    "google",
+    "eslint:recommended",
+    "plugin:@typescript-eslint/eslint-recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:@typescript-eslint/recommended-requiring-type-checking",
+    "plugin:functional/external-typescript-recommended",
+    "plugin:functional/recommended",
+    "plugin:functional/stylistic",
+    "prettier"
+  ],
+  "plugins": [
+    "@typescript-eslint",
+    "functional"
+  ],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module",
+    "project": "tsconfig.json"
+  },
+  "rules": {
+    "functional/no-expression-statements": ["error", { "ignoreVoid": true }],
+    "camelcase": "warn",
+    "max-len": [
+      "error",
+      {
+        "code": 150
+      }
+    ],
+    "require-jsdoc": "off",
+    "max-lines-per-function": ["error", { "max": 20, "skipComments": true, "skipBlankLines": true  }]
+  },
+  "ignorePatterns": [
+    "tests",
+    "jest.config.ts",
+    "jest.config.js",
+    "prisma",
+    "prisma-mongo",
+    "js"
+  ],
+  "ignoreFiles": [
+    "src/index.ts"
+  ]
+}
