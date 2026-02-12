@@ -1,14 +1,14 @@
 {
   "name": "erreteessepe",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "RTSP relay service",
+  "main": "build/index.js",
   "scripts": {
-    "start": "ts-node-dev -r tsconfig-paths/register index.ts",
+    "start": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prod": "node build/index.js",
-    "dev": "ts-node-dev -r tsconfig-paths/register --watch . --respawn --pretty src/index.ts",
-    "build": "tsc -b --pretty && resolve-tspaths"
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc -p tsconfig.json"
   },
   "keywords": [],
   "author": "",

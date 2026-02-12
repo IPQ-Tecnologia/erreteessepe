@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RTSP Stream Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #00d9ff;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #16213e;
+      color: #fff;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #0f3460;
+    }
+
+    button.active {
+      background: #00d9ff;
+      color: #1a1a2e;
+    }
+
+    .video-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+
+    canvas {
+      max-width: 100%;
+      background: #000;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .status {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background: #16213e;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .status.connected {
+      border-left: 4px solid #00ff88;
+    }
+
+    .status.disconnected {
+      border-left: 4px solid #ff4444;
+    }
+
+    .status.connecting {
+      border-left: 4px solid #ffaa00;
+    }
+
+    .retry-btn {
+      margin-top: 15px;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #ff6b35;
+      color: #fff;
+      transition: background 0.2s, transform 0.1s;
+      display: none;
+    }
+
+    .retry-btn:hover {
+      background: #ff8c5a;
+      transform: scale(1.02);
+    }
+
+    .retry-btn.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>RTSP Stream Test</h1>
+
+  <div id="controls" class="controls"></div>
+
+  <div class="video-container">
+    <canvas id="video-canvas" width="800" height="450"></canvas>
+    <div id="status" class="status disconnected">Status: Disconnected</div>
+    <button id="retry-btn" class="retry-btn">Try Again</button>
+  </div>
+
+  <script src="/jsmpeg.min.js"></script>
+  <script>
+    let player = null;
+    let activeConnectionId = 0;
+    let lastAttemptedCamera = null;
+    const canvas = document.getElementById('video-canvas');
+    const statusEl = document.getElementById('status');
+    const controlsEl = document.getElementById('controls');
+    const retryBtn = document.getElementById('retry-btn');
+    let buttons = [];
+
+    // Map WebSocket close codes to user-friendly messages
+    const ERROR_MESSAGES = {
+      4001: 'Camera is unreachable - check network connection',
+      4003: 'Authentication failed - invalid credentials',
+      4000: 'Stream error - camera may be offline',
+      1008: 'Invalid camera request',
+      1011: 'Server error - please try again',
+    };
+
+    function getErrorMessage(code, reason) {
+      return ERROR_MESSAGES[code] || reason || 'Connection failed';
+    }
+
+    function showRetryButton() {
+      retryBtn.classList.add('visible');
+    }
+
+    function hideRetryButton() {
+      retryBtn.classList.remove('visible');
+    }
+
+    retryBtn.addEventListener('click', () => {
+      if (lastAttemptedCamera) {
+        connectStream(lastAttemptedCamera);
+      }
+    });
+
+    function ensureCanvasVisible() {
+      canvas.style.display = 'block';
+    }
+
+    function updateStatus(message, state) {
+      statusEl.textContent = `Status: ${message}`;
+      statusEl.className = `status ${state}`;
+    }
+
+    function setActiveButton(camera) {
+      buttons.forEach((btn) => {
+        btn.classList.remove('active');
+        if (btn.textContent === camera) {
+          btn.classList.add('active');
+        }
+      });
+    }
+
+    function disconnect() {
+      activeConnectionId += 1;
+      if (player) {
+        player.destroy();
+        player = null;
+      }
+      ensureCanvasVisible();
+      hideRetryButton();
+      updateStatus('Disconnected', 'disconnected');
+      setActiveButton(null);
+      
+      // Clear canvas
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    async function connectStream(camera) {
+      // Disconnect existing stream
+      disconnect();
+      const connectionId = activeConnectionId;
+
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/stream?camera=${camera}`;
+      
+      lastAttemptedCamera = camera;
+      hideRetryButton();
+      updateStatus(`Connecting to ${camera}...`, 'connecting');
+      setActiveButton(camera);
+      ensureCanvasVisible();
+
+      // First, test the WebSocket connection to catch server-side validation errors
+      const testWs = new WebSocket(wsUrl);
+      
+      const connectionResult = await new Promise((resolve) => {
+        let resolved = false;
+        
+        const timeout = setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
+          testWs.close();
+          resolve({ success: false, code: 4001, reason: 'Connection timed out' });
+        }, 10000);
+
+        testWs.onopen = () => {
+          console.log('[WS Test] Connection opened');
+        };
+
+        testWs.onmessage = (event) => {
+          // If we receive data, connection is good - resolve success
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          testWs.close();
+          console.log('[WS Test] Received data, connection successful');
+          resolve({ success: true });
+        };
+
+        testWs.onclose = (event) => {
+          console.log('[WS Test] Connection closed with code:', event.code, 'reason:', event.reason);
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          
+          // Any close code other than 1000 (normal) is an error
+          if (event.code !== 1000) {
+            resolve({ success: false, code: event.code, reason: event.reason });
+          } else {
+            resolve({ success: true });
+          }
+        };
+
+        testWs.onerror = (err) => {
+          console.log('[WS Test] Connection error:', err);
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          resolve({ success: false, code: 4000, reason: 'Connection failed' });
+        };
+      });
+
+      if (connectionId !== activeConnectionId) return;
+
+      console.log('[WS Test] Connection result:', connectionResult);
+
+      if (!connectionResult.success) {
+        const errorMsg = getErrorMessage(connectionResult.code, connectionResult.reason);
+        updateStatus(errorMsg, 'disconnected');
+        showRetryButton();
+        return;
+      }
+
+      try {
+        if (typeof window.loadPlayer !== 'function') {
+          throw new Error('player loader unavailable');
+        }
+
+        const nextPlayer = await window.loadPlayer({
+          canvas: canvas,
+          url: wsUrl,
+          autoplay: true,
+          audio: false,
+          loop: false,
+          disableGl: true,
+          onSourceEstablished: () => {
+            if (connectionId !== activeConnectionId) return;
+            updateStatus(`Connected to ${camera}`, 'connected');
+          },
+          onSourceCompleted: () => {
+            if (connectionId !== activeConnectionId) return;
+            updateStatus('Stream ended', 'disconnected');
+            showRetryButton();
+          }
+        });
+
+        if (connectionId !== activeConnectionId) {
+          nextPlayer.destroy();
+          ensureCanvasVisible();
+          return;
+        }
+
+        player = nextPlayer;
+        ensureCanvasVisible();
+      } catch (err) {
+        if (connectionId !== activeConnectionId) return;
+        ensureCanvasVisible();
+        const message = err && err.message ? err.message : String(err);
+        updateStatus(`Error: ${message}`, 'disconnected');
+        showRetryButton();
+        console.error('Stream error:', err);
+      }
+    }
+
+    function createCameraButton(cameraId) {
+      const button = document.createElement('button');
+      button.textContent = cameraId;
+      button.addEventListener('click', () => connectStream(cameraId));
+      return button;
+    }
+
+    function createDisconnectButton() {
+      const button = document.createElement('button');
+      button.textContent = 'Disconnect';
+      button.style.background = '#ff4444';
+      button.addEventListener('click', disconnect);
+      return button;
+    }
+
+    async function loadCameraControls() {
+      try {
+        const response = await fetch('/api/cameras');
+        const data = await response.json();
+        const cameras = Array.isArray(data.cameras) ? data.cameras : [];
+
+        controlsEl.innerHTML = '';
+
+        cameras.forEach((cameraId) => {
+          controlsEl.appendChild(createCameraButton(cameraId));
+        });
+
+        controlsEl.appendChild(createDisconnectButton());
+        buttons = Array.from(document.querySelectorAll('.controls button'));
+      } catch (err) {
+        updateStatus('Failed to load cameras', 'disconnected');
+        console.error('Camera list error:', err);
+      }
+    }
+
+    // Initial canvas state
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#444';
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Select a camera to start streaming', canvas.width / 2, canvas.height / 2);
+    ensureCanvasVisible();
+    loadCameraControls();
+  </script>
+</body>
+</html>

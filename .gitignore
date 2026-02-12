@@ -150,3 +150,7 @@ build/*
 
 fotos
 pessoas.json
+
+build
+
+.github
