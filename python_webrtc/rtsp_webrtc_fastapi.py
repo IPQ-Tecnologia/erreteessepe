@@ -36,6 +36,106 @@ TCP_CHECK_TIMEOUT_MS = 3000
 PROBE_TIMEOUT_SECONDS = 5
 
 
+def getenv_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError:
+        logger.warning("Invalid integer for %s=%r, falling back to %d", name, raw_value, default)
+        return default
+
+
+def getenv_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    logger.warning("Invalid boolean for %s=%r, falling back to %s", name, raw_value, default)
+    return default
+
+
+RTSP_TIMEOUT_US = getenv_int("RTSP_TIMEOUT_US", 5_000_000)
+RTSP_MAX_DELAY_US = getenv_int("RTSP_MAX_DELAY_US", 100_000)
+RTSP_REORDER_QUEUE_SIZE = getenv_int("RTSP_REORDER_QUEUE_SIZE", 0)
+
+WEBRTC_RELAY_BUFFERED = getenv_bool("WEBRTC_RELAY_BUFFERED", False)
+WEBRTC_VIDEO_MAX_BITRATE_BPS = max(200_000, getenv_int("WEBRTC_VIDEO_MAX_BITRATE_BPS", 2_500_000))
+WEBRTC_VIDEO_START_BITRATE_BPS = max(200_000, getenv_int("WEBRTC_VIDEO_START_BITRATE_BPS", 1_500_000))
+WEBRTC_VIDEO_START_BITRATE_BPS = min(WEBRTC_VIDEO_START_BITRATE_BPS, WEBRTC_VIDEO_MAX_BITRATE_BPS)
+WEBRTC_VIDEO_MIN_BITRATE_BPS = max(100_000, getenv_int("WEBRTC_VIDEO_MIN_BITRATE_BPS", 500_000))
+WEBRTC_VIDEO_MIN_BITRATE_BPS = min(WEBRTC_VIDEO_MIN_BITRATE_BPS, WEBRTC_VIDEO_START_BITRATE_BPS)
+
+
+def build_rtsp_options() -> dict[str, str]:
+    return {
+        "rtsp_transport": os.getenv("RTSP_TRANSPORT", "tcp"),
+        "stimeout": str(RTSP_TIMEOUT_US),
+        "fflags": "nobuffer",
+        "flags": "low_delay",
+        # Keep demuxer buffering small so stale frames are dropped instead of queued.
+        "max_delay": str(RTSP_MAX_DELAY_US),
+        "reorder_queue_size": str(RTSP_REORDER_QUEUE_SIZE),
+    }
+
+
+def apply_video_bitrate_caps(answer_sdp: str) -> str:
+    lines = answer_sdp.splitlines()
+    tuned_lines: list[str] = []
+    in_video_section = False
+
+    for line in lines:
+        if line.startswith("m="):
+            in_video_section = line.startswith("m=video ")
+            tuned_lines.append(line)
+            if in_video_section:
+                tuned_lines.append(f"b=AS:{max(1, WEBRTC_VIDEO_MAX_BITRATE_BPS // 1000)}")
+                tuned_lines.append(f"b=TIAS:{WEBRTC_VIDEO_MAX_BITRATE_BPS}")
+            continue
+
+        if in_video_section:
+            if line.startswith("b=AS:") or line.startswith("b=TIAS:"):
+                continue
+            if line.startswith("a=fmtp:"):
+                line = append_google_bitrate_hints(line)
+
+        tuned_lines.append(line)
+
+    return "\r\n".join(tuned_lines) + "\r\n"
+
+
+def append_google_bitrate_hints(fmtp_line: str) -> str:
+    if " " not in fmtp_line:
+        return fmtp_line
+
+    prefix, raw_params = fmtp_line.split(" ", 1)
+    params = [param.strip() for param in raw_params.split(";") if param.strip()]
+    if any(param.lower().startswith("apt=") for param in params):
+        return fmtp_line
+
+    existing_keys = {
+        param.split("=", 1)[0].strip().lower()
+        for param in params
+        if "=" in param
+    }
+
+    additions = [
+        ("x-google-min-bitrate", max(1, WEBRTC_VIDEO_MIN_BITRATE_BPS // 1000)),
+        ("x-google-start-bitrate", max(1, WEBRTC_VIDEO_START_BITRATE_BPS // 1000)),
+        ("x-google-max-bitrate", max(1, WEBRTC_VIDEO_MAX_BITRATE_BPS // 1000)),
+    ]
+    for key, value in additions:
+        if key not in existing_keys:
+            params.append(f"{key}={value}")
+
+    return f"{prefix} {';'.join(params)}"
+
+
 @dataclass(frozen=True)
 class Camera:
     id: str
@@ -116,19 +216,14 @@ class CameraStreamManager:
                 player = MediaPlayer(
                     camera.rtsp_url,
                     format="rtsp",
-                    options={
-                        "rtsp_transport": os.getenv("RTSP_TRANSPORT", "tcp"),
-                        "stimeout": os.getenv("RTSP_TIMEOUT_US", "5000000"),
-                        "fflags": "nobuffer",
-                        "flags": "low_delay",
-                    },
+                    options=build_rtsp_options(),
                 )
                 self._players[camera_id] = player
 
         if player.video is None:
             raise RuntimeError(f"Camera '{camera_id}' has no video track")
 
-        return self._relay.subscribe(player.video)
+        return self._relay.subscribe(player.video, buffered=WEBRTC_RELAY_BUFFERED)
 
     async def close(self) -> None:
         async with self._lock:
@@ -246,6 +341,13 @@ async def on_startup() -> None:
     cameras = load_cameras()
     stream_manager = CameraStreamManager(cameras)
     logger.info(
+        "Low-latency config: relay_buffered=%s max_delay_us=%d reorder_queue_size=%d max_bitrate_bps=%d",
+        WEBRTC_RELAY_BUFFERED,
+        RTSP_MAX_DELAY_US,
+        RTSP_REORDER_QUEUE_SIZE,
+        WEBRTC_VIDEO_MAX_BITRATE_BPS,
+    )
+    logger.info(
         "Configured cameras: %s",
         ", ".join([f"{c.id} ({c.name})" for c in cameras.values()]),
     )
@@ -361,7 +463,8 @@ async def offer(payload: OfferRequest) -> AnswerResponse:
     if local is None:
         raise HTTPException(status_code=500, detail="No local description generated")
 
-    return AnswerResponse(sdp=local.sdp, type=local.type)
+    tuned_sdp = apply_video_bitrate_caps(local.sdp)
+    return AnswerResponse(sdp=tuned_sdp, type=local.type)
 
 
 FRONTEND_FILE = Path(__file__).resolve().parent / "static" / "index.html"
