@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RTSP WebRTC Test Player</title>
+  <style>
+    :root {
+      --bg: #f2f4f8;
+      --card: #ffffff;
+      --text: #1f2937;
+      --accent: #0d9488;
+      --border: #d1d5db;
+      --danger: #b91c1c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #d6f5f2, var(--bg) 55%);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 24px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    select, input, button {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    select, input {
+      min-width: 220px;
+      background: #fff;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+      border: 0;
+    }
+
+    #startBtn {
+      background: var(--accent);
+    }
+
+    #stopBtn {
+      background: var(--danger);
+    }
+
+    #checkStatusBtn {
+      background: #1d4ed8;
+    }
+
+    video {
+      width: 100%;
+      max-height: 68vh;
+      border-radius: 10px;
+      background: #000;
+      border: 1px solid var(--border);
+    }
+
+    #status {
+      margin: 10px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #log {
+      white-space: pre-wrap;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 86px;
+      margin: 12px 0 0;
+      font-size: 12px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>RTSP -> WebRTC Test Frontend</h1>
+
+    <div class="controls">
+      <div>
+        <label for="cameraSelect">Configured Camera</label>
+        <select id="cameraSelect"></select>
+      </div>
+
+      <div>
+        <label for="cameraIdInput">Override Camera ID</label>
+        <input id="cameraIdInput" value="cam1" placeholder="camera id" />
+      </div>
+
+      <div style="display:flex; align-items:flex-end; gap:10px;">
+        <button id="startBtn">Start Stream</button>
+        <button id="checkStatusBtn">Check Status</button>
+        <button id="stopBtn">Stop Stream</button>
+      </div>
+    </div>
+
+    <div id="status">Idle</div>
+    <video id="video" autoplay playsinline muted controls></video>
+    <pre id="log"></pre>
+  </main>
+
+  <script>
+    const videoEl = document.getElementById("video");
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+    const cameraSelectEl = document.getElementById("cameraSelect");
+    const cameraIdInputEl = document.getElementById("cameraIdInput");
+    const startBtnEl = document.getElementById("startBtn");
+    const checkStatusBtnEl = document.getElementById("checkStatusBtn");
+    const stopBtnEl = document.getElementById("stopBtn");
+
+    let pc = null;
+
+    const log = (msg) => {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent += `[${ts}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    const setStatus = (text) => {
+      statusEl.textContent = text;
+    };
+
+    const selectedCameraId = () => {
+      const override = cameraIdInputEl.value.trim();
+      if (override) {
+        return override;
+      }
+      return cameraSelectEl.value || "cam1";
+    };
+
+    const waitForIceGathering = (peerConnection) => {
+      if (peerConnection.iceGatheringState === "complete") {
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        const onStateChange = () => {
+          if (peerConnection.iceGatheringState === "complete") {
+            peerConnection.removeEventListener("icegatheringstatechange", onStateChange);
+            resolve();
+          }
+        };
+        peerConnection.addEventListener("icegatheringstatechange", onStateChange);
+      });
+    };
+
+    const closePeer = async () => {
+      if (!pc) return;
+      try {
+        pc.getSenders().forEach((sender) => {
+          if (sender.track) sender.track.stop();
+        });
+        pc.close();
+      } catch (error) {
+        log(`close error: ${error}`);
+      } finally {
+        pc = null;
+        videoEl.srcObject = null;
+        setStatus("Idle");
+      }
+    };
+
+    const loadCameras = async () => {
+      cameraSelectEl.innerHTML = "";
+      try {
+        const response = await fetch("/cameras");
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const cameras = Array.isArray(data.cameras) ? data.cameras : [];
+        if (cameras.length === 0) {
+          throw new Error("No cameras configured");
+        }
+        cameras.forEach((camera) => {
+          const option = document.createElement("option");
+          option.value = camera.id;
+          option.textContent = `${camera.name} (${camera.id})`;
+          cameraSelectEl.appendChild(option);
+        });
+        cameraIdInputEl.value = cameras[0].id;
+        log(`loaded ${cameras.length} camera(s)`);
+      } catch (error) {
+        const option = document.createElement("option");
+        option.value = "cam1";
+        option.textContent = "cam1";
+        cameraSelectEl.appendChild(option);
+        log(`camera list unavailable: ${error}`);
+      }
+    };
+
+    const startStream = async () => {
+      await closePeer();
+      const cameraId = selectedCameraId();
+      setStatus(`Connecting to ${cameraId}...`);
+      log(`starting stream for ${cameraId}`);
+
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+
+      pc.ontrack = (event) => {
+        videoEl.srcObject = event.streams[0];
+      };
+      pc.onconnectionstatechange = () => {
+        setStatus(`Connection: ${pc.connectionState}`);
+        log(`state: ${pc.connectionState}`);
+      };
+
+      try {
+        const offer = await pc.createOffer({
+          offerToReceiveVideo: true,
+          offerToReceiveAudio: false
+        });
+        await pc.setLocalDescription(offer);
+        await waitForIceGathering(pc);
+
+        const response = await fetch("/offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sdp: pc.localDescription.sdp,
+            type: pc.localDescription.type,
+            camera_id: cameraId
+          })
+        });
+
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(`offer failed (${response.status}): ${message}`);
+        }
+
+        const answer = await response.json();
+        await pc.setRemoteDescription(answer);
+        setStatus(`Streaming ${cameraId}`);
+        log(`stream started for ${cameraId}`);
+      } catch (error) {
+        log(`start error: ${error}`);
+        setStatus("Error");
+        await closePeer();
+      }
+    };
+
+    const checkStatus = async () => {
+      const cameraId = selectedCameraId();
+      setStatus(`Checking ${cameraId}...`);
+      try {
+        const response = await fetch(`/status?camera_id=${encodeURIComponent(cameraId)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || `HTTP ${response.status}`);
+        }
+        const state = data.status || {};
+        if (state.ok) {
+          setStatus(`Status OK: ${cameraId}`);
+          log(`status ${cameraId}: ok`);
+          return;
+        }
+        const reason = state.reason || "unknown";
+        const message = state.message || "unknown error";
+        setStatus(`Status FAIL: ${cameraId} (${reason})`);
+        log(`status ${cameraId}: ${reason} - ${message}`);
+      } catch (error) {
+        setStatus("Status check error");
+        log(`status check failed: ${error}`);
+      }
+    };
+
+    cameraSelectEl.addEventListener("change", () => {
+      cameraIdInputEl.value = cameraSelectEl.value;
+    });
+    startBtnEl.addEventListener("click", startStream);
+    checkStatusBtnEl.addEventListener("click", checkStatus);
+    stopBtnEl.addEventListener("click", closePeer);
+
+    loadCameras();
+  </script>
+</body>
+</html>
