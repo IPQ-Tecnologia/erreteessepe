@@ -162,3 +162,6 @@ __pycache__/
 *.pyo
 *.pyd
 .venv/
+# SFU runtime artifacts
+runtime/*
+!runtime/.gitkeep

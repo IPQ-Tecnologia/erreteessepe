@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LiveKit Camera Viewer</title>
+  <style>
+    :root {
+      --bg: #f2f4f8;
+      --card: #ffffff;
+      --text: #1f2937;
+      --accent: #0d9488;
+      --border: #d1d5db;
+      --danger: #b91c1c;
+      --info: #1d4ed8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #d6f5f2, var(--bg) 55%);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 24px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    select, input, button {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    select, input {
+      min-width: 220px;
+      background: #fff;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+      border: 0;
+    }
+
+    #startBtn { background: var(--accent); }
+    #stopBtn { background: var(--danger); }
+    #checkStatusBtn { background: var(--info); }
+
+    video {
+      width: 100%;
+      max-height: 68vh;
+      border-radius: 10px;
+      background: #000;
+      border: 1px solid var(--border);
+    }
+
+    #status {
+      margin: 10px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #log {
+      white-space: pre-wrap;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 86px;
+      margin: 12px 0 0;
+      font-size: 12px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>RTSP -> LiveKit SFU Viewer</h1>
+
+    <div class="controls">
+      <div>
+        <label for="cameraSelect">Configured Camera</label>
+        <select id="cameraSelect"></select>
+      </div>
+
+      <div>
+        <label for="cameraIdInput">Override Camera ID</label>
+        <input id="cameraIdInput" value="cam1" placeholder="camera id" />
+      </div>
+
+      <div style="display:flex; align-items:flex-end; gap:10px;">
+        <button id="startBtn">Start Viewer</button>
+        <button id="checkStatusBtn">Check Status</button>
+        <button id="stopBtn">Stop Viewer</button>
+      </div>
+    </div>
+
+    <div id="status">Idle</div>
+    <video id="video" autoplay playsinline muted controls></video>
+    <pre id="log"></pre>
+  </main>
+
+  <script>
+    const videoEl = document.getElementById("video");
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+    const cameraSelectEl = document.getElementById("cameraSelect");
+    const cameraIdInputEl = document.getElementById("cameraIdInput");
+    const startBtnEl = document.getElementById("startBtn");
+    const checkStatusBtnEl = document.getElementById("checkStatusBtn");
+    const stopBtnEl = document.getElementById("stopBtn");
+
+    let room = null;
+    let currentVideoTrack = null;
+    let livekitModule = null;
+    let pcDebugInstalled = false;
+    let lastCapturedIceServers = [];
+
+    const log = (msg) => {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent += `[${ts}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    const setStatus = (text) => {
+      statusEl.textContent = text;
+    };
+
+    const normalizeIceServerUrls = (iceServer) => {
+      const urls = iceServer && iceServer.urls;
+      if (typeof urls === "string") {
+        return [urls];
+      }
+      if (Array.isArray(urls)) {
+        return urls.filter((value) => typeof value === "string");
+      }
+      return [];
+    };
+
+    const cloneIceServers = (iceServers) => {
+      try {
+        return JSON.parse(JSON.stringify(iceServers || []));
+      } catch (_error) {
+        return [];
+      }
+    };
+
+    const isPrivateIpv4Host = (host) => {
+      const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+      if (!match) {
+        return false;
+      }
+
+      const [a, b] = [Number(match[1]), Number(match[2])];
+      if (Number.isNaN(a) || Number.isNaN(b)) {
+        return false;
+      }
+
+      if (a === 10) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      if (a === 192 && b === 168) return true;
+      return false;
+    };
+
+    const rewriteIceUrlHostToTarget = (url, targetHost) => {
+      const match = /^(stun:|turn:|turns:)([^?]+)(\?.*)?$/i.exec(url);
+      if (!match) {
+        return url;
+      }
+
+      const scheme = match[1];
+      const hostPort = match[2];
+      const query = match[3] || "";
+
+      // Skip IPv6 ICE URLs for now (not used in this stack).
+      if (hostPort.startsWith("[")) {
+        return url;
+      }
+
+      let host = hostPort;
+      let port = "";
+      const lastColon = hostPort.lastIndexOf(":");
+      if (lastColon !== -1 && hostPort.indexOf(":") === lastColon) {
+        host = hostPort.slice(0, lastColon);
+        port = hostPort.slice(lastColon);
+      }
+
+      const lowerHost = host.toLowerCase();
+      const shouldRewrite =
+        lowerHost === "localhost" ||
+        lowerHost === "127.0.0.1" ||
+        isPrivateIpv4Host(lowerHost);
+
+      if (!shouldRewrite) {
+        return url;
+      }
+
+      return `${scheme}${targetHost}${port}${query}`;
+    };
+
+    const rewriteLocalhostIceServers = (iceServers) => {
+      const targetHost = window.location.hostname || "127.0.0.1";
+      return (iceServers || []).map((iceServer) => {
+        const urls = normalizeIceServerUrls(iceServer).flatMap((url) => {
+          const rewritten = rewriteIceUrlHostToTarget(url, targetHost);
+          const expanded = [rewritten];
+
+          // Add TURN over TCP fallback for browsers/networks where UDP relay fails.
+          if (/^turn:/i.test(rewritten)) {
+            if (/transport=udp/i.test(rewritten)) {
+              expanded.push(rewritten.replace(/transport=udp/gi, "transport=tcp"));
+            } else if (!/transport=/i.test(rewritten)) {
+              expanded.push(`${rewritten}${rewritten.includes("?") ? "&" : "?"}transport=tcp`);
+            }
+          }
+
+          return expanded;
+        });
+        const uniqueUrls = Array.from(new Set(urls));
+
+        const next = { ...iceServer };
+        if (Array.isArray(iceServer.urls)) {
+          next.urls = uniqueUrls;
+        } else if (typeof iceServer.urls === "string") {
+          next.urls = uniqueUrls[0] || iceServer.urls;
+        }
+        return next;
+      });
+    };
+
+    const installPeerConnectionDebugHooks = () => {
+      if (pcDebugInstalled) {
+        return;
+      }
+
+      const OriginalPC = window.RTCPeerConnection;
+      if (typeof OriginalPC !== "function") {
+        log("RTCPeerConnection is unavailable in this browser context");
+        return;
+      }
+
+      const wrapPc = (pc) => {
+        const id = Math.random().toString(36).slice(2, 8);
+        pc.addEventListener("iceconnectionstatechange", () => {
+          log(`pc(${id}) iceConnectionState=${pc.iceConnectionState}`);
+        });
+        pc.addEventListener("connectionstatechange", () => {
+          log(`pc(${id}) connectionState=${pc.connectionState}`);
+        });
+        pc.addEventListener("icecandidateerror", (event) => {
+          const url = event.url || "unknown-url";
+          const code = event.errorCode || "unknown-code";
+          const text = event.errorText || "unknown-error";
+          log(`pc(${id}) icecandidateerror url=${url} code=${code} text=${text}`);
+        });
+        return pc;
+      };
+
+      const WrappedPC = function (...args) {
+        const rtcConfig = args[0];
+        if (rtcConfig && typeof rtcConfig === "object" && Array.isArray(rtcConfig.iceServers)) {
+          lastCapturedIceServers = cloneIceServers(rtcConfig.iceServers);
+          const urls = rtcConfig.iceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
+          log(
+            `pc ice config: policy=${rtcConfig.iceTransportPolicy || "all"} servers=${urls.length > 0 ? urls.join(", ") : "none"}`,
+          );
+        }
+
+        // eslint-disable-next-line new-cap
+        return wrapPc(new OriginalPC(...args));
+      };
+
+      WrappedPC.prototype = OriginalPC.prototype;
+      if (typeof OriginalPC.generateCertificate === "function") {
+        WrappedPC.generateCertificate = (...args) => OriginalPC.generateCertificate(...args);
+      }
+
+      window.RTCPeerConnection = WrappedPC;
+      pcDebugInstalled = true;
+      log("installed RTCPeerConnection debug hooks");
+    };
+
+    const selectedCameraId = () => {
+      const override = cameraIdInputEl.value.trim();
+      if (override) {
+        return override;
+      }
+      return cameraSelectEl.value || "cam1";
+    };
+
+    const ensureLiveKitModule = async () => {
+      if (livekitModule) {
+        return livekitModule;
+      }
+      livekitModule = await import("https://cdn.jsdelivr.net/npm/livekit-client@2.15.13/+esm");
+      return livekitModule;
+    };
+
+    const detachCurrentTrack = () => {
+      if (!currentVideoTrack) {
+        videoEl.srcObject = null;
+        return;
+      }
+
+      currentVideoTrack.detach(videoEl);
+      currentVideoTrack = null;
+      videoEl.srcObject = null;
+    };
+
+    const attachVideoTrack = (track) => {
+      detachCurrentTrack();
+      currentVideoTrack = track;
+      track.attach(videoEl);
+      setStatus("Streaming");
+    };
+
+    const closeRoom = async () => {
+      detachCurrentTrack();
+      if (!room) {
+        setStatus("Idle");
+        return;
+      }
+
+      try {
+        room.disconnect();
+      } catch (error) {
+        log(`disconnect error: ${error}`);
+      } finally {
+        room = null;
+        setStatus("Idle");
+      }
+    };
+
+    const loadCameras = async () => {
+      cameraSelectEl.innerHTML = "";
+      try {
+        const response = await fetch("/cameras");
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const cameras = Array.isArray(data.cameras) ? data.cameras : [];
+        if (cameras.length === 0) {
+          throw new Error("No cameras configured");
+        }
+
+        cameras.forEach((camera) => {
+          const option = document.createElement("option");
+          option.value = camera.id;
+          option.textContent = `${camera.name} (${camera.id})`;
+          cameraSelectEl.appendChild(option);
+        });
+
+        cameraIdInputEl.value = cameras[0].id;
+        log(`loaded ${cameras.length} camera(s)`);
+      } catch (error) {
+        const option = document.createElement("option");
+        option.value = "cam1";
+        option.textContent = "cam1";
+        cameraSelectEl.appendChild(option);
+        log(`camera list unavailable: ${error}`);
+      }
+    };
+
+    const subscribeExistingTracks = (Track) => {
+      if (!room) return;
+      room.remoteParticipants.forEach((participant) => {
+        participant.trackPublications.forEach((publication) => {
+          if (publication.track && publication.track.kind === Track.Kind.Video) {
+            attachVideoTrack(publication.track);
+          }
+        });
+      });
+    };
+
+    const normalizeLiveKitUrl = (rawUrl) => {
+      try {
+        const parsed = new URL(rawUrl);
+        const pageHost = window.location.hostname;
+        const isLoopbackHost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+        const isPageLoopback =
+          pageHost === "localhost" ||
+          pageHost === "127.0.0.1" ||
+          pageHost === "";
+
+        // If frontend is opened from another host, avoid returning loopback signaling URLs.
+        if (isLoopbackHost && !isPageLoopback) {
+          parsed.hostname = pageHost;
+          return parsed.toString();
+        }
+      } catch (error) {
+        log(`invalid livekit url from API: ${error}`);
+      }
+      return rawUrl;
+    };
+
+    const startViewer = async () => {
+      await closeRoom();
+      const cameraId = selectedCameraId();
+
+      try {
+        setStatus(`Requesting session for ${cameraId}...`);
+        const sessionResponse = await fetch(`/viewer/session?camera_id=${encodeURIComponent(cameraId)}`);
+        const sessionData = await sessionResponse.json();
+
+        if (!sessionResponse.ok) {
+          throw new Error(sessionData.detail || `HTTP ${sessionResponse.status}`);
+        }
+
+        installPeerConnectionDebugHooks();
+        const livekit = await ensureLiveKitModule();
+        const { Room, RoomEvent, Track } = livekit;
+
+        const createRoom = () => {
+          const nextRoom = new Room({
+            adaptiveStream: false,
+            dynacast: false,
+            stopLocalTrackOnUnpublish: true,
+          });
+
+          nextRoom.on(RoomEvent.TrackSubscribed, (track) => {
+            if (track.kind === Track.Kind.Video) {
+              log("video track subscribed");
+              attachVideoTrack(track);
+            }
+          });
+
+          nextRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
+            if (currentVideoTrack === track) {
+              log("video track unsubscribed");
+              detachCurrentTrack();
+              setStatus("Offline (no published track)");
+            }
+          });
+
+          nextRoom.on(RoomEvent.Disconnected, () => {
+            detachCurrentTrack();
+            setStatus("Disconnected");
+            log("room disconnected");
+          });
+
+          nextRoom.on(RoomEvent.Reconnecting, () => {
+            setStatus("Reconnecting...");
+          });
+
+          nextRoom.on(RoomEvent.Reconnected, () => {
+            setStatus("Connected");
+          });
+
+          return nextRoom;
+        };
+
+        const connectRoom = async (livekitUrl, forceRelay, rewriteLocalhostIce) => {
+          room = createRoom();
+          const connectOptions = { autoSubscribe: true };
+          if (forceRelay) {
+            connectOptions.rtcConfig = { iceTransportPolicy: "relay" };
+          }
+
+          if (rewriteLocalhostIce) {
+            if (lastCapturedIceServers.length === 0) {
+              log("rewrite localhost ICE requested but no captured LiveKit iceServers yet");
+            } else {
+              const rewrittenIceServers = rewriteLocalhostIceServers(lastCapturedIceServers);
+              const beforeUrls = lastCapturedIceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
+              const afterUrls = rewrittenIceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
+              connectOptions.rtcConfig = {
+                ...(connectOptions.rtcConfig || {}),
+                iceServers: rewrittenIceServers,
+              };
+              log(`rewriting ICE urls: ${beforeUrls.join(", ")} -> ${afterUrls.join(", ")}`);
+            }
+          }
+
+          await room.connect(livekitUrl, sessionData.token, connectOptions);
+        };
+
+        setStatus("Connecting to LiveKit...");
+        const livekitUrl = normalizeLiveKitUrl(sessionData.livekit_url);
+        const isFirefox = /firefox/i.test(navigator.userAgent);
+        const attempts = [
+          { label: "direct ICE", relayOnly: false },
+          { label: "TURN relay only", relayOnly: true },
+        ];
+        if (isFirefox) {
+          attempts.push({
+            label: "TURN relay only (rewrite private ICE hosts)",
+            relayOnly: true,
+            rewriteLocalhostIce: true,
+          });
+        }
+
+        let connected = false;
+        const errors = [];
+
+        for (const attempt of attempts) {
+          try {
+            setStatus(`Connecting: ${attempt.label}...`);
+            await connectRoom(livekitUrl, attempt.relayOnly, Boolean(attempt.rewriteLocalhostIce));
+            connected = true;
+            break;
+          } catch (attemptError) {
+            errors.push(`${attempt.label}: ${attemptError}`);
+            log(`${attempt.label} failed: ${attemptError}`);
+            await closeRoom();
+          }
+        }
+
+        if (!connected) {
+          throw new Error(errors.join("; "));
+        }
+
+        setStatus(`Connected (${sessionData.room_name}), waiting for camera track...`);
+        log(`connected as ${sessionData.identity} to room ${sessionData.room_name}`);
+
+        subscribeExistingTracks(Track);
+
+        setTimeout(() => {
+          if (room && !currentVideoTrack) {
+            setStatus("Offline (camera not publishing)");
+          }
+        }, 6000);
+      } catch (error) {
+        log(`start error: ${error}`);
+        setStatus("Error");
+        await closeRoom();
+      }
+    };
+
+    const checkStatus = async () => {
+      const cameraId = selectedCameraId();
+      setStatus(`Checking ${cameraId}...`);
+
+      try {
+        const response = await fetch(`/status?camera_id=${encodeURIComponent(cameraId)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || `HTTP ${response.status}`);
+        }
+
+        const status = data.status || {};
+        const state = status.state || "unknown";
+        const message = status.message || "";
+
+        setStatus(`Status ${cameraId}: ${state}`);
+        log(`status ${cameraId}: state=${state} online=${Boolean(status.online)} message=${message}`);
+      } catch (error) {
+        setStatus("Status check error");
+        log(`status check failed: ${error}`);
+      }
+    };
+
+    cameraSelectEl.addEventListener("change", () => {
+      cameraIdInputEl.value = cameraSelectEl.value;
+    });
+    startBtnEl.addEventListener("click", startViewer);
+    checkStatusBtnEl.addEventListener("click", checkStatus);
+    stopBtnEl.addEventListener("click", closeRoom);
+
+    loadCameras();
+  </script>
+</body>
+</html>

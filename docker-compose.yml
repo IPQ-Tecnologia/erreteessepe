@@ -1,0 +1,86 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./deploy/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "50000-50100:50000-50100/udp"
+      - "50000-50100:50000-50100/tcp"
+
+  livekit-ingress:
+    image: livekit/ingress:latest
+    command: ["--config", "/etc/ingress.yaml"]
+    volumes:
+      - ./deploy/livekit/ingress.yaml:/etc/ingress.yaml:ro
+    depends_on:
+      - redis
+      - livekit
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "1935:1935"
+      - "7885:7885/udp"
+
+  python-api:
+    build:
+      context: .
+      dockerfile: back/docker/api.Dockerfile
+    env_file:
+      - .env
+    environment:
+      APP_PORT: 8000
+      LIVEKIT_API_URL: http://livekit:7880
+      LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:-ws://localhost:7880}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-devsecret_devsecret_devsecret_2026}
+      CAMERA_ROOM_PREFIX: ${CAMERA_ROOM_PREFIX:-camera}
+      INGEST_STATUS_FILE: /runtime/ingest-status.json
+      CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN:-*}
+    volumes:
+      - ./runtime:/runtime
+    depends_on:
+      - livekit
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+  camera-ingest:
+    build:
+      context: .
+      dockerfile: back/docker/ingest.Dockerfile
+    env_file:
+      - .env
+    environment:
+      LIVEKIT_API_URL: http://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-devsecret_devsecret_devsecret_2026}
+      CAMERA_ROOM_PREFIX: ${CAMERA_ROOM_PREFIX:-camera}
+      INGEST_STATUS_FILE: /runtime/ingest-status.json
+      RTSP_TRANSPORT: ${RTSP_TRANSPORT:-tcp}
+      RTSP_RW_TIMEOUT_US: ${RTSP_RW_TIMEOUT_US:-10000000}
+      INGEST_RETRY_BASE_SECONDS: ${INGEST_RETRY_BASE_SECONDS:-2}
+      INGEST_RETRY_MAX_SECONDS: ${INGEST_RETRY_MAX_SECONDS:-30}
+      INGEST_FFMPEG_LOGLEVEL: ${INGEST_FFMPEG_LOGLEVEL:-warning}
+      INGEST_PUBLISH_PROTOCOL: ${INGEST_PUBLISH_PROTOCOL:-auto}
+      INGEST_TRANSCODE_BITRATE: ${INGEST_TRANSCODE_BITRATE:-2500k}
+      INGEST_TRANSCODE_GOP: ${INGEST_TRANSCODE_GOP:-30}
+      INGEST_ENABLE_H264_PASSTHROUGH: ${INGEST_ENABLE_H264_PASSTHROUGH:-true}
+    volumes:
+      - ./runtime:/runtime
+    depends_on:
+      - livekit
+      - livekit-ingress
+    restart: unless-stopped

@@ -1,0 +1,17 @@
+api_key: devkey
+api_secret: devsecret_devsecret_devsecret_2026
+ws_url: ws://livekit:7880
+
+redis:
+  address: redis:6379
+
+health_port: 8090
+rtmp_port: 1935
+whip_port: 8080
+
+log_level: info
+
+rtc_config:
+  udp_port: 7885
+  use_external_ip: false
+  enable_loopback_candidate: true
