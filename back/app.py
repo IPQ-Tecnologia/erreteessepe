@@ -181,7 +181,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         print("Serving frontend from", FRONTEND_FILE)
         if not FRONTEND_FILE.exists():
             raise HTTPException(status_code=500, detail="Missing frontend file")
-        return FileResponse(FRONTEND_FILE)
+        return FileResponse(
+            FRONTEND_FILE,
+            headers={
+                "Cache-Control": "no-store, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
 
     return app
 

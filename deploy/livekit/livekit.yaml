@@ -12,7 +12,6 @@ rtc:
   stun_servers:
     - stun.l.google.com:19302
     - stun1.l.google.com:19302
-    - global.stun.twilio.com:3478
 
 redis:
   address: redis:6379

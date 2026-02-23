@@ -56,13 +56,17 @@ class Settings:
     livekit_api_secret: str
     viewer_token_ttl_seconds: int
     camera_room_prefix: str
+    ingest_instance_tag: str
+    ingest_participant_identity_prefix: str
     ingest_status_file: str
     rtsp_transport: str
     rtsp_rw_timeout_us: int
     ingest_retry_base_seconds: int
     ingest_retry_max_seconds: int
+    ingest_recreate_ingress_on_retry: bool
     ingest_ffmpeg_loglevel: str
     ingest_publish_protocol: str
+    ingest_publish_host_override: str
     ingest_probe_size_bytes: int
     ingest_analyze_duration_us: int
     ingest_reorder_queue_size: int
@@ -90,19 +94,23 @@ class Settings:
             livekit_api_secret=os.getenv("LIVEKIT_API_SECRET", "devsecret_devsecret_devsecret_2026"),
             viewer_token_ttl_seconds=_getenv_int("VIEWER_TOKEN_TTL_SECONDS", 3600, minimum=60),
             camera_room_prefix=os.getenv("CAMERA_ROOM_PREFIX", "camera"),
+            ingest_instance_tag=os.getenv("INGEST_INSTANCE_TAG", "").strip(),
+            ingest_participant_identity_prefix=os.getenv("INGEST_PARTICIPANT_IDENTITY_PREFIX", "ingress").strip(),
             ingest_status_file=os.getenv("INGEST_STATUS_FILE", "runtime/ingest-status.json"),
             rtsp_transport=os.getenv("RTSP_TRANSPORT", "tcp"),
             rtsp_rw_timeout_us=_getenv_int("RTSP_RW_TIMEOUT_US", 10_000_000, minimum=1_000_000),
             ingest_retry_base_seconds=_getenv_int("INGEST_RETRY_BASE_SECONDS", 2, minimum=1),
             ingest_retry_max_seconds=_getenv_int("INGEST_RETRY_MAX_SECONDS", 30, minimum=1),
+            ingest_recreate_ingress_on_retry=_getenv_bool("INGEST_RECREATE_INGRESS_ON_RETRY", True),
             ingest_ffmpeg_loglevel=os.getenv("INGEST_FFMPEG_LOGLEVEL", "warning"),
             ingest_publish_protocol=os.getenv("INGEST_PUBLISH_PROTOCOL", "auto").strip().lower(),
-            ingest_probe_size_bytes=_getenv_int("INGEST_PROBE_SIZE_BYTES", 32_768, minimum=32),
-            ingest_analyze_duration_us=_getenv_int("INGEST_ANALYZE_DURATION_US", 0, minimum=0),
-            ingest_reorder_queue_size=_getenv_int("INGEST_REORDER_QUEUE_SIZE", 0, minimum=0),
-            ingest_max_delay_us=_getenv_int("INGEST_MAX_DELAY_US", 0, minimum=0),
+            ingest_publish_host_override=os.getenv("INGEST_PUBLISH_HOST_OVERRIDE", "").strip(),
+            ingest_probe_size_bytes=_getenv_int("INGEST_PROBE_SIZE_BYTES", 1_000_000, minimum=32),
+            ingest_analyze_duration_us=_getenv_int("INGEST_ANALYZE_DURATION_US", 1_000_000, minimum=0),
+            ingest_reorder_queue_size=_getenv_int("INGEST_REORDER_QUEUE_SIZE", 16, minimum=0),
+            ingest_max_delay_us=_getenv_int("INGEST_MAX_DELAY_US", 500_000, minimum=0),
             ingest_transcode_bitrate=os.getenv("INGEST_TRANSCODE_BITRATE", "2500k"),
-            ingest_transcode_bufsize=os.getenv("INGEST_TRANSCODE_BUFSIZE", "500k"),
+            ingest_transcode_bufsize=os.getenv("INGEST_TRANSCODE_BUFSIZE", "2500k"),
             ingest_transcode_gop=_getenv_int("INGEST_TRANSCODE_GOP", 30, minimum=10),
             ingest_transcode_preset=os.getenv("INGEST_TRANSCODE_PRESET", "ultrafast"),
             ingest_transcode_threads=_getenv_int("INGEST_TRANSCODE_THREADS", 1, minimum=1),

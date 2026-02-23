@@ -148,6 +148,8 @@
     let livekitModule = null;
     let pcDebugInstalled = false;
     let lastCapturedIceServers = [];
+    let preferredIceHost = "";
+    const CLIENT_BUILD = "2026-02-23-ice-host-v3";
 
     const log = (msg) => {
       const ts = new Date().toLocaleTimeString();
@@ -231,19 +233,43 @@
       return `${scheme}${targetHost}${port}${query}`;
     };
 
-    const rewriteLocalhostIceServers = (iceServers) => {
-      const targetHost = window.location.hostname || "127.0.0.1";
-      return (iceServers || []).map((iceServer) => {
+    const resolvePreferredIceHost = (livekitUrl) => {
+      const fallbackHost = window.location.hostname || "127.0.0.1";
+      try {
+        const parsed = new URL(livekitUrl);
+        const livekitHost = parsed.hostname || "";
+        if (!livekitHost) {
+          return fallbackHost;
+        }
+
+        // For local-only signaling URLs, keep using the page host.
+        if (livekitHost === "localhost" || livekitHost === "127.0.0.1") {
+          return fallbackHost;
+        }
+        return livekitHost;
+      } catch (_error) {
+        return fallbackHost;
+      }
+    };
+
+    const rewriteLocalhostIceServers = (iceServers, targetHostOverride = "") => {
+      const targetHost = (targetHostOverride || "").trim() || window.location.hostname || "127.0.0.1";
+      const rewritten = (iceServers || []).map((iceServer) => {
         const urls = normalizeIceServerUrls(iceServer).flatMap((url) => {
-          const rewritten = rewriteIceUrlHostToTarget(url, targetHost);
-          const expanded = [rewritten];
+          // This STUN endpoint frequently fails DNS resolution in restricted networks.
+          if (/^stun:global\.stun\.twilio\.com(?::\d+)?(?:\?.*)?$/i.test(url)) {
+            return [];
+          }
+
+          const rewrittenUrl = rewriteIceUrlHostToTarget(url, targetHost);
+          const expanded = [rewrittenUrl];
 
           // Add TURN over TCP fallback for browsers/networks where UDP relay fails.
-          if (/^turn:/i.test(rewritten)) {
-            if (/transport=udp/i.test(rewritten)) {
-              expanded.push(rewritten.replace(/transport=udp/gi, "transport=tcp"));
-            } else if (!/transport=/i.test(rewritten)) {
-              expanded.push(`${rewritten}${rewritten.includes("?") ? "&" : "?"}transport=tcp`);
+          if (/^turn:/i.test(rewrittenUrl)) {
+            if (/transport=udp/i.test(rewrittenUrl)) {
+              expanded.push(rewrittenUrl.replace(/transport=udp/gi, "transport=tcp"));
+            } else if (!/transport=/i.test(rewrittenUrl)) {
+              expanded.push(`${rewrittenUrl}${rewrittenUrl.includes("?") ? "&" : "?"}transport=tcp`);
             }
           }
 
@@ -255,10 +281,12 @@
         if (Array.isArray(iceServer.urls)) {
           next.urls = uniqueUrls;
         } else if (typeof iceServer.urls === "string") {
-          next.urls = uniqueUrls[0] || iceServer.urls;
+          next.urls = uniqueUrls.length <= 1 ? (uniqueUrls[0] || "") : uniqueUrls;
         }
         return next;
       });
+
+      return rewritten.filter((iceServer) => normalizeIceServerUrls(iceServer).length > 0);
     };
 
     const installPeerConnectionDebugHooks = () => {
@@ -292,10 +320,24 @@
       const WrappedPC = function (...args) {
         const rtcConfig = args[0];
         if (rtcConfig && typeof rtcConfig === "object" && Array.isArray(rtcConfig.iceServers)) {
-          lastCapturedIceServers = cloneIceServers(rtcConfig.iceServers);
-          const urls = rtcConfig.iceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
+          const beforeUrls = rtcConfig.iceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
+          const rewrittenIceServers = rewriteLocalhostIceServers(rtcConfig.iceServers, preferredIceHost);
+          const afterUrls = rewrittenIceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
+          if (beforeUrls.join("|") !== afterUrls.join("|")) {
+            args[0] = {
+              ...rtcConfig,
+              iceServers: rewrittenIceServers,
+            };
+            log(
+              `pc ice rewrite applied: ${beforeUrls.length > 0 ? beforeUrls.join(", ") : "none"} -> ${afterUrls.length > 0 ? afterUrls.join(", ") : "none"}`,
+            );
+          }
+
+          lastCapturedIceServers = cloneIceServers(rewrittenIceServers);
+          const effectiveRtcConfig = args[0];
+          const urls = rewrittenIceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
           log(
-            `pc ice config: policy=${rtcConfig.iceTransportPolicy || "all"} servers=${urls.length > 0 ? urls.join(", ") : "none"}`,
+            `pc ice config: policy=${effectiveRtcConfig.iceTransportPolicy || "all"} servers=${urls.length > 0 ? urls.join(", ") : "none"}`,
           );
         }
 
@@ -492,9 +534,9 @@
 
           if (rewriteLocalhostIce) {
             if (lastCapturedIceServers.length === 0) {
-              log("rewrite localhost ICE requested but no captured LiveKit iceServers yet");
+              log("rewrite private ICE hosts requested but no captured LiveKit iceServers yet");
             } else {
-              const rewrittenIceServers = rewriteLocalhostIceServers(lastCapturedIceServers);
+              const rewrittenIceServers = rewriteLocalhostIceServers(lastCapturedIceServers, preferredIceHost);
               const beforeUrls = lastCapturedIceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
               const afterUrls = rewrittenIceServers.flatMap((iceServer) => normalizeIceServerUrls(iceServer));
               connectOptions.rtcConfig = {
@@ -510,18 +552,17 @@
 
         setStatus("Connecting to LiveKit...");
         const livekitUrl = normalizeLiveKitUrl(sessionData.livekit_url);
-        const isFirefox = /firefox/i.test(navigator.userAgent);
+        preferredIceHost = resolvePreferredIceHost(livekitUrl);
+        log(`client build=${CLIENT_BUILD} preferred ICE host=${preferredIceHost} livekit=${livekitUrl}`);
         const attempts = [
           { label: "direct ICE", relayOnly: false },
           { label: "TURN relay only", relayOnly: true },
-        ];
-        if (isFirefox) {
-          attempts.push({
+          {
             label: "TURN relay only (rewrite private ICE hosts)",
             relayOnly: true,
             rewriteLocalhostIce: true,
-          });
-        }
+          },
+        ];
 
         let connected = false;
         const errors = [];
