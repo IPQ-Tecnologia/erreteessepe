@@ -1,141 +1,260 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <title>WebRTC Player</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #fff;
-      padding: 20px;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Player Nativo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+            height: 100vh;
+        }
 
-    video {
-      width: 100%;
-      max-width: 800px;
-      background: #000;
-      margin-top: 20px;
-    }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
 
-    input, button {
-      padding: 8px;
-      margin-right: 8px;
-    }
-  </style>
+        h1 { margin-top: 0; font-size: 1.5rem; color: #fff; }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background-color: #2c2c2c;
+            color: white;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        #btnPlay { background-color: #2196F3; color: white; }
+        #btnPlay:hover { background-color: #1976D2; }
+        #btnPlay:disabled { background-color: #555; cursor: not-allowed; }
+
+        #btnStop { background-color: #f44336; color: white; }
+        #btnStop:hover { background-color: #d32f2f; }
+        #btnStop:disabled { background-color: #555; cursor: not-allowed; }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            background-color: black;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #statusLog {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #888;
+            font-family: monospace;
+            min-height: 20px;
+        }
+
+        .error { color: #ff5252 !important; }
+        .success { color: #4caf50 !important; }
+    </style>
 </head>
 <body>
 
-<h2>WebRTC Stream</h2>
+    <div class="container">
+        <h1>Monitoramento WebRTC</h1>
 
-<div>
-  <input
-    id="device"
-    type="text"
-    placeholder="Nome do device (ex: camera01)"
-  />
+        <div class="controls">
+            <input type="text" id="cameraId" placeholder="ID da Câmera (ex: camera02)" value="camera02">
+            <button id="btnPlay">ASSISTIR</button>
+            <button id="btnStop" disabled>PARAR</button>
+        </div>
 
-  <input
-    id="user"
-    type="text"
-    placeholder="User ID"
-  />
+        <div class="video-wrapper">
+            <video id="remoteVideo" autoplay playsinline muted controls></video>
+        </div>
 
-  <button id="connect">
-    Conectar
-  </button>
-</div>
+        <div id="statusLog">Aguardando conexão...</div>
+    </div>
 
-<video id="video" autoplay playsinline controls></video>
+    <script>
+        // ================= CONFIGURAÇÃO =================
+        // URL do seu Backend Python que retorna o JSON de config
+        const API_ENDPOINT = 'http://localhost:5000/api/camera';
+        // ================================================
 
-<script>
-  const video = document.getElementById("video");
-  const connectBtn = document.getElementById("connect");
+        let pc = null;
+        const videoEl = document.getElementById('remoteVideo');
+        const btnPlay = document.getElementById('btnPlay');
+        const btnStop = document.getElementById('btnStop');
+        const inputId = document.getElementById('cameraId');
+        const statusLog = document.getElementById('statusLog');
 
-  let currentDevice = null;
-  let pc = null;
+        function log(msg, type = 'info') {
+            statusLog.innerText = msg;
+            statusLog.className = type === 'error' ? 'error' : (type === 'success' ? 'success' : '');
+            console.log(`[Player] ${msg}`);
+        }
 
-  async function connectWebRTC(webrtc) {
-    pc = new RTCPeerConnection();
+        // Função auxiliar para aguardar ICE Candidates (Timeout 500ms)
+        function waitForIceGathering(pc, timeoutMs = 500) {
+            return new Promise((resolve) => {
+                if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                    return;
+                }
 
-    pc.ontrack = (event) => {
-      video.srcObject = event.streams[0];
-    };
+                const timeoutId = setTimeout(() => {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                }, timeoutMs);
 
-    pc.onconnectionstatechange = () => {
-      console.log("WebRTC state:", pc.connectionState);
-    };
+                const checkState = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        clearTimeout(timeoutId);
+                        pc.removeEventListener('icegatheringstatechange', checkState);
+                        resolve();
+                    }
+                };
+                pc.addEventListener('icegatheringstatechange', checkState);
+            });
+        }
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+        async function startStream() {
+            const cameraId = inputId.value.trim();
+            if (!cameraId) return alert('Digite um ID de câmera');
 
-    const auth = btoa(`${webrtc.username}:${webrtc.password}`);
+            log('Iniciando...', 'info');
+            btnPlay.disabled = true;
+            btnStop.disabled = false;
 
-    const response = await fetch(webrtc.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/sdp",
-        "Authorization": `Basic ${auth}`
-      },
-      body: offer.sdp
-    });
+            try {
+                // ------------------------------------------------
+                // PASSO 1: Buscar configuração no Python
+                // ------------------------------------------------
+                log(`Buscando config para: ${cameraId}...`);
+                const configResponse = await fetch(`/stream/${cameraId}?user_id=1`);
 
-    if (!response.ok) {
-      throw new Error("Erro ao conectar no WebRTC");
-    }
+                if (!configResponse.ok) throw new Error(`Erro na API Python: ${configResponse.status}`);
 
-    const answerSDP = await response.text();
+                const configData = await configResponse.json();
 
-    await pc.setRemoteDescription({
-      type: "answer",
-      sdp: answerSDP
-    });
-  }
+                // Extrai dados do JSON
+                let { url: signalingUrl, username, password } = configData.webrtc;
 
-  connectBtn.onclick = async () => {
-    const device = document.getElementById("device").value;
-    const userId = document.getElementById("user").value;
+                // Garante que termina com /whep (padrão do MediaMTX para POST)
+                if (!signalingUrl.endsWith('/whep')) {
+                    signalingUrl = signalingUrl.replace(/\/$/, '') + '/whep';
+                }
 
-    if (!device || !userId) {
-      alert("Informe o device e o user_id");
-      return;
-    }
+                // ------------------------------------------------
+                // PASSO 2: Criar PeerConnection
+                // ------------------------------------------------
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
 
-    try {
-      const res = await fetch(
-        `/stream/${encodeURIComponent(device)}?user_id=${encodeURIComponent(userId)}`
-      );
+                // Receber vídeo apenas
+                pc.addTransceiver('video', { direction: 'recvonly' });
 
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err);
-      }
+                pc.ontrack = (event) => {
+                    log('Stream recebido! Reproduzindo...', 'success');
+                    videoEl.srcObject = event.streams[0];
+                };
 
-      const data = await res.json();
+                pc.onconnectionstatechange = () => {
+                    if (pc.connectionState === 'failed') {
+                        log('Falha na conexão WebRTC', 'error');
+                        stopStream();
+                    }
+                };
 
-      console.log("Stream info:", data);
+                // ------------------------------------------------
+                // PASSO 3: Criar Oferta e Negociar
+                // ------------------------------------------------
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
 
-      currentDevice = device;
+                // Espera breve pelos ICE Candidates (500ms)
+                await waitForIceGathering(pc);
 
-      await connectWebRTC(data.webrtc);
+                log('Enviando oferta WHEP...');
 
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao iniciar stream");
-    }
-  };
+                // Prepara Headers
+                const headers = { 'Content-Type': 'application/sdp' };
+                if (username && password) {
+                    headers['Authorization'] = 'Basic ' + btoa(`${username}:${password}`);
+                }
 
-  // 🔴 AVISA O BACKEND AO SAIR DA PÁGINA
-  window.addEventListener("beforeunload", () => {
-    if (currentDevice) {
-      navigator.sendBeacon(`/stream/close/${currentDevice}`);
-    }
+                // POST para o MediaMTX
+                const whepResponse = await fetch(signalingUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: pc.localDescription.sdp // Envia SDP puro (texto)
+                });
 
-    if (pc) {
-      pc.close();
-    }
-  });
-</script>
+                if (!whepResponse.ok) throw new Error(`Erro no MediaMTX: ${whepResponse.status}`);
 
+                // A resposta é um texto SDP (não JSON)
+                const answerSdp = await whepResponse.text();
+                await pc.setRemoteDescription(new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: answerSdp
+                }));
+
+            } catch (error) {
+                log(`Erro: ${error.message}`, 'error');
+                stopStream();
+            }
+        }
+
+        function stopStream() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            videoEl.srcObject = null;
+            btnPlay.disabled = false;
+            btnStop.disabled = true;
+            if (statusLog.className !== 'error') log('Desconectado');
+        }
+
+        // Event Listeners
+        btnPlay.addEventListener('click', startStream);
+        btnStop.addEventListener('click', stopStream);
+    </script>
 </body>
 </html>
