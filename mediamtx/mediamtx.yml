@@ -1,0 +1,33 @@
+logLevel: info
+logDestinations: [stdout]
+
+api: yes
+apiAddress: :9997
+
+rtsp: yes
+rtspAddress: :8554
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigin: "*"
+
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+
+authInternalUsers:
+  - user: viewer
+    pass: strongpassword
+    permissions:
+      - action: read
+
+  - user: backend
+    pass: backendpassword
+    permissions:
+      - action: api
+
+paths:
+  all:
+    source: publisher
+    # sourceOnDemand: yes
+    sourceOnDemandCloseAfter: 20s
+    overridePublisher: no

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebRTC Player</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      padding: 20px;
+    }
+
+    video {
+      width: 100%;
+      max-width: 800px;
+      background: #000;
+      margin-top: 20px;
+    }
+
+    input, button {
+      padding: 8px;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>WebRTC Stream</h2>
+
+<div>
+  <input
+    id="device"
+    type="text"
+    placeholder="Nome do device (ex: camera01)"
+  />
+
+  <input
+    id="user"
+    type="text"
+    placeholder="User ID"
+  />
+
+  <button id="connect">
+    Conectar
+  </button>
+</div>
+
+<video id="video" autoplay playsinline controls></video>
+
+<script>
+  const video = document.getElementById("video");
+  const connectBtn = document.getElementById("connect");
+
+  let currentDevice = null;
+  let pc = null;
+
+  async function connectWebRTC(webrtc) {
+    pc = new RTCPeerConnection();
+
+    pc.ontrack = (event) => {
+      video.srcObject = event.streams[0];
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("WebRTC state:", pc.connectionState);
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const auth = btoa(`${webrtc.username}:${webrtc.password}`);
+
+    const response = await fetch(webrtc.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        "Authorization": `Basic ${auth}`
+      },
+      body: offer.sdp
+    });
+
+    if (!response.ok) {
+      throw new Error("Erro ao conectar no WebRTC");
+    }
+
+    const answerSDP = await response.text();
+
+    await pc.setRemoteDescription({
+      type: "answer",
+      sdp: answerSDP
+    });
+  }
+
+  connectBtn.onclick = async () => {
+    const device = document.getElementById("device").value;
+    const userId = document.getElementById("user").value;
+
+    if (!device || !userId) {
+      alert("Informe o device e o user_id");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/stream/${encodeURIComponent(device)}?user_id=${encodeURIComponent(userId)}`
+      );
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+
+      const data = await res.json();
+
+      console.log("Stream info:", data);
+
+      currentDevice = device;
+
+      await connectWebRTC(data.webrtc);
+
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao iniciar stream");
+    }
+  };
+
+  // 🔴 AVISA O BACKEND AO SAIR DA PÁGINA
+  window.addEventListener("beforeunload", () => {
+    if (currentDevice) {
+      navigator.sendBeacon(`/stream/close/${currentDevice}`);
+    }
+
+    if (pc) {
+      pc.close();
+    }
+  });
+</script>
+
+</body>
+</html>
