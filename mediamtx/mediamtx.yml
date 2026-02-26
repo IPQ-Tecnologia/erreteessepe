@@ -9,7 +9,19 @@ rtspAddress: :8554
 
 webrtc: yes
 webrtcAddress: :8889
-webrtcAllowOrigin: "*"
+webrtcAllowOrigins:
+  - "*"
+
+# # for macos
+# webrtcAdditionalHosts:
+#   - localhost
+#   - 127.0.0.1
+#   - host.docker.internal
+
+# webrtcICEHostNAT1To1IPs:
+#   - 127.0.0.1
+
+# webrtcLocalTCPAddress: :8189
 
 webrtcICEServers2:
   - url: stun:stun.l.google.com:19302

@@ -1,29 +1,13 @@
-import os
+from app.core.settings import settings
+from app.domain.cameras import CAMERAS
 
-# MediaMTX (container)
-MEDIAMTX_HOST = os.getenv("MEDIAMTX_HOST", "mediamtx")
-MEDIAMTX_API = os.getenv("MEDIAMTX_API", "http://mediamtx:9997")
-
-RTSP_PORT = int(os.getenv("RTSP_PORT", "8554"))
-WEBRTC_PORT = int(os.getenv("WEBRTC_PORT", "8889"))
-
-# Credenciais API MediaMTX (usuário backend)
-MEDIAMTX_API_USER = os.getenv("MEDIAMTX_API_USER", "backend")
-MEDIAMTX_API_PASS = os.getenv("MEDIAMTX_API_PASS", "backendpassword")
-
-# Credenciais WebRTC (usuário viewer)
-WEBRTC_USER = os.getenv("WEBRTC_USER", "viewer")
-WEBRTC_PASS = os.getenv("WEBRTC_PASS", "strongpassword")
-
-# Host público usado pelo frontend
-PUBLIC_WEBRTC_HOST = os.getenv("PUBLIC_WEBRTC_HOST", "localhost")
-
-# Regras de negócio
-MAX_VIEWERS = int(os.getenv("MAX_VIEWERS", "5"))
-
-# 📷 Dicionário de câmeras → RTSP
-CAMERAS = {
-    "camera01": "rtsp://admin:admin%40123@192.168.101.212:554/cam/realmonitor?channel=1&subtype=0",
-    "camera02": "rtsp://admin:admin123@192.168.101.211:554/cam/realmonitor?channel=1&subtype=0",
-    "camera03":  "rtsp://admin:admin%40123@192.168.101.210:554/cam/realmonitor?channel=1&subtype=0",
-}
+MEDIAMTX_HOST = settings.mediamtx_host
+MEDIAMTX_API = settings.mediamtx_api
+RTSP_PORT = settings.rtsp_port
+WEBRTC_PORT = settings.webrtc_port
+MEDIAMTX_API_USER = settings.mediamtx_api_user
+MEDIAMTX_API_PASS = settings.mediamtx_api_pass
+WEBRTC_USER = settings.webrtc_user
+WEBRTC_PASS = settings.webrtc_pass
+PUBLIC_WEBRTC_HOST = settings.public_webrtc_host
+MAX_VIEWERS = settings.max_viewers

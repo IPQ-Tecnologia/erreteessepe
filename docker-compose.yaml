@@ -1,12 +1,14 @@
 services:
   mediamtx:
-    image: bluenviron/mediamtx:latest
+    image: bluenviron/mediamtx:1.15.4
     container_name: mediamtx
     restart: unless-stopped
     ports:
       - "8554:8554"      # RTSP
+      - "8888:8888"      # HLS fallback
       - "8889:8889"      # WebRTC
       - "8189:8189/udp"  # ICE / WebRTC UDP
+      - "8189:8189/tcp"  # ICE / WebRTC TCP fallback
       - "9997:9997"      # API MediaMTX
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml
