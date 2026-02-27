@@ -12,13 +12,13 @@ webrtcAddress: :8889
 webrtcAllowOrigins:
   - "*"
 
-# for macos
-webrtcAdditionalHosts:
-  - localhost
-  - 127.0.0.1
-  - host.docker.internal
+# # for macos
+# webrtcAdditionalHosts:
+#   - localhost
+#   - 127.0.0.1
+#   - host.docker.internal
 
-webrtcLocalTCPAddress: :8189
+# webrtcLocalTCPAddress: :8189
 
 webrtcICEServers2:
   - url: stun:stun.l.google.com:19302
