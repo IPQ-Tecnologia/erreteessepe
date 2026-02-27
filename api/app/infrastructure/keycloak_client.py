@@ -24,6 +24,7 @@ class KeycloakClient:
         self._client_id = settings.keycloak_client_id
         self._client_secret = settings.keycloak_client_secret
         self._timeout = 8
+        self._max_attempts = 4
 
     def issue_token(self, username: str, password: str) -> str:
         token, _ = self.issue_token_with_exp(username, password)
@@ -42,14 +43,7 @@ class KeycloakClient:
             "password": password,
             "grant_type": "password",
         }
-        try:
-            response = requests.post(self._token_url, data=payload, timeout=self._timeout)
-        except RequestException as exc:
-            raise HTTPException(
-                status_code=503,
-                detail="Keycloak indisponivel no momento",
-            ) from exc
-
+        response = self._request_token_with_retry(payload)
         if response.status_code != 200:
             raise HTTPException(status_code=401, detail="Falha ao autenticar no Keycloak")
 
@@ -66,6 +60,33 @@ class KeycloakClient:
         with self._cache_lock:
             self._token_cache[cache_key] = (token, expires_at)
         return token, expires_at
+
+    def _request_token_with_retry(self, payload: dict[str, str]) -> requests.Response:
+        delay_seconds = 0.6
+        last_error: RequestException | None = None
+
+        for attempt in range(self._max_attempts):
+            try:
+                response = requests.post(self._token_url, data=payload, timeout=self._timeout)
+            except RequestException as exc:
+                last_error = exc
+                if attempt == self._max_attempts - 1:
+                    break
+                time.sleep(delay_seconds)
+                delay_seconds *= 1.8
+                continue
+
+            # Retry temporary server-side failures that happen during startup.
+            if response.status_code in (502, 503, 504) and attempt < self._max_attempts - 1:
+                time.sleep(delay_seconds)
+                delay_seconds *= 1.8
+                continue
+            return response
+
+        raise HTTPException(
+            status_code=503,
+            detail="Keycloak indisponivel no momento",
+        ) from last_error
 
     def _get_cached(self, cache_key: tuple[str, str]) -> tuple[str, int] | None:
         with self._cache_lock:

@@ -11,6 +11,17 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
     volumes:
       - ./runtime/keycloak/realm-mediamtx.json:/opt/keycloak/data/import/realm-mediamtx.json:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc "exec 3<>/dev/tcp/127.0.0.1/8080;
+          echo -e 'GET /realms/mediamtx/protocol/openid-connect/certs HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          head -n 1 <&3 | grep -q '200 OK'"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   mediamtx:
     image: bluenviron/mediamtx:1.15.4
@@ -26,7 +37,8 @@ services:
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml
     depends_on:
-      - keycloak
+      keycloak:
+        condition: service_healthy
 
   api:
     build:
@@ -37,8 +49,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - keycloak
-      - mediamtx
+      keycloak:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
     env_file:
       - ./.env
     environment:
