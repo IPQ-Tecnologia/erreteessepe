@@ -1,4 +1,17 @@
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8080:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./runtime/keycloak/realm-mediamtx.json:/opt/keycloak/data/import/realm-mediamtx.json:ro
+
   mediamtx:
     image: bluenviron/mediamtx:1.15.4
     container_name: mediamtx
@@ -12,6 +25,8 @@ services:
       - "9997:9997"      # API MediaMTX
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml
+    depends_on:
+      - keycloak
 
   api:
     build:
@@ -22,6 +37,7 @@ services:
     ports:
       - "8000:8000"
     depends_on:
+      - keycloak
       - mediamtx
     env_file:
       - ./.env

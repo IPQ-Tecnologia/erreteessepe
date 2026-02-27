@@ -4,15 +4,17 @@ import time
 
 import requests
 from fastapi import HTTPException
+from requests import RequestException
 
 from app.core.settings import settings
+from app.infrastructure.keycloak_client import KeycloakClient
 
 
 class MediaMTXClient:
     def __init__(self) -> None:
         self._base_url = settings.mediamtx_api
-        self._auth = (settings.mediamtx_api_user, settings.mediamtx_api_pass)
         self._timeout = 5
+        self._keycloak_client = KeycloakClient()
 
     def path_exists(self, device_name: str) -> bool:
         response = self._get_path(device_name)
@@ -48,32 +50,44 @@ class MediaMTXClient:
 
     def create_path(self, device_name: str, rtsp_source: str) -> None:
         payload = {"source": rtsp_source}
-        response = requests.post(
-            f"{self._base_url}/v3/config/paths/add/{device_name}",
-            auth=self._auth,
-            json=payload,
-            timeout=self._timeout,
-        )
+        try:
+            response = requests.post(
+                f"{self._base_url}/v3/config/paths/add/{device_name}",
+                auth=self._basic_auth(),
+                headers=self._auth_headers(),
+                json=payload,
+                timeout=self._timeout,
+            )
+        except RequestException as exc:
+            raise HTTPException(status_code=503, detail="MediaMTX indisponivel") from exc
 
         if response.status_code not in (200, 201, 409):
             raise HTTPException(status_code=500, detail=response.text)
 
     def remove_path(self, device_name: str) -> None:
-        response = requests.post(
-            f"{self._base_url}/v3/config/paths/remove/{device_name}",
-            auth=self._auth,
-            timeout=self._timeout,
-        )
+        try:
+            response = requests.delete(
+                f"{self._base_url}/v3/config/paths/delete/{device_name}",
+                auth=self._basic_auth(),
+                headers=self._auth_headers(),
+                timeout=self._timeout,
+            )
+        except RequestException as exc:
+            raise HTTPException(status_code=503, detail="MediaMTX indisponivel") from exc
 
-        if response.status_code not in (200, 404):
+        if response.status_code not in (200, 201, 204):
             raise HTTPException(status_code=500, detail=response.text)
 
     def get_viewer_count(self, device_name: str) -> int:
-        response = requests.get(
-            f"{self._base_url}/v3/paths/list",
-            auth=self._auth,
-            timeout=self._timeout,
-        )
+        try:
+            response = requests.get(
+                f"{self._base_url}/v3/paths/list",
+                auth=self._basic_auth(),
+                headers=self._auth_headers(),
+                timeout=self._timeout,
+            )
+        except RequestException:
+            return 0
         if response.status_code != 200:
             return 0
 
@@ -84,8 +98,27 @@ class MediaMTXClient:
         return 0
 
     def _get_path(self, device_name: str) -> requests.Response:
-        return requests.get(
-            f"{self._base_url}/v3/paths/get/{device_name}",
-            auth=self._auth,
-            timeout=self._timeout,
+        try:
+            return requests.get(
+                f"{self._base_url}/v3/paths/get/{device_name}",
+                auth=self._basic_auth(),
+                headers=self._auth_headers(),
+                timeout=self._timeout,
+            )
+        except RequestException as exc:
+            raise HTTPException(status_code=503, detail="MediaMTX indisponivel") from exc
+
+    def _auth_headers(self) -> dict | None:
+        if settings.auth_provider != "keycloak":
+            return None
+        token = self._keycloak_client.issue_token(
+            settings.mediamtx_api_user,
+            settings.mediamtx_api_pass,
         )
+        return {"Authorization": f"Bearer {token}"}
+
+    @staticmethod
+    def _basic_auth() -> tuple[str, str] | None:
+        if settings.auth_provider == "keycloak":
+            return None
+        return (settings.mediamtx_api_user, settings.mediamtx_api_pass)

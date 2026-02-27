@@ -12,34 +12,22 @@ webrtcAddress: :8889
 webrtcAllowOrigins:
   - "*"
 
-# # for macos
-# webrtcAdditionalHosts:
-#   - localhost
-#   - 127.0.0.1
-#   - host.docker.internal
+# for macos
+webrtcAdditionalHosts:
+  - localhost
+  - 127.0.0.1
+  - host.docker.internal
 
-# webrtcICEHostNAT1To1IPs:
-#   - 127.0.0.1
-
-# webrtcLocalTCPAddress: :8189
+webrtcLocalTCPAddress: :8189
 
 webrtcICEServers2:
   - url: stun:stun.l.google.com:19302
 
-authInternalUsers:
-  - user: viewer
-    pass: strongpassword
-    permissions:
-      - action: read
-
-  - user: backend
-    pass: backendpassword
-    permissions:
-      - action: api
+authMethod: jwt
+authJWTJWKS: http://keycloak:8080/realms/mediamtx/protocol/openid-connect/certs
+authJWTClaimKey: mediamtx_permissions
 
 paths:
   all:
     source: publisher
-    # sourceOnDemand: yes
-    sourceOnDemandCloseAfter: 20s
     overridePublisher: no

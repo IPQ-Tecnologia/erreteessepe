@@ -3,8 +3,10 @@ from pydantic import BaseModel
 
 class WebRTCConfig(BaseModel):
     url: str
-    username: str
-    password: str
+    auth_type: str
+    username: str | None = None
+    password: str | None = None
+    token: str | None = None
 
 
 class StreamResponse(BaseModel):

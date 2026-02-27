@@ -37,5 +37,13 @@ def cleanup_if_idle(device_name: str):
     return _service.cleanup_if_idle(device_name)
 
 
-def prepare_stream(user_id: str, device_name: str) -> dict:
-    return _service.prepare_stream(user_id, device_name).model_dump()
+def prepare_stream(
+    user_id: str,
+    device_name: str,
+    viewer_token: str | None = None,
+) -> dict:
+    return _service.prepare_stream(
+        user_id,
+        device_name,
+        viewer_token=viewer_token,
+    ).model_dump()

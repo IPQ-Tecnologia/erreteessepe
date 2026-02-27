@@ -1,0 +1,82 @@
+{
+  "realm": "mediamtx",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "clients": [
+    {
+      "clientId": "mediamtx",
+      "name": "MediaMTX",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "mediamtx-dev-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "defaultClientScopes": ["profile", "email"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "mediamtx_permissions",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "mediamtx_permissions",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "mediamtx_permissions",
+            "jsonType.label": "JSON",
+            "multivalued": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "viewer",
+      "enabled": true,
+      "firstName": "Stream",
+      "lastName": "Viewer",
+      "email": "viewer@mediamtx.local",
+      "emailVerified": true,
+      "attributes": {
+        "mediamtx_permissions": [
+          "{\"action\":\"read\",\"path\":\"\"}"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer123",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "backend",
+      "enabled": true,
+      "firstName": "Stream",
+      "lastName": "Backend",
+      "email": "backend@mediamtx.local",
+      "emailVerified": true,
+      "attributes": {
+        "mediamtx_permissions": [
+          "{\"action\":\"api\",\"path\":\"\"}"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "backendpassword",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

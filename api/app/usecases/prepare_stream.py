@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import threading
+import time
 from fastapi import HTTPException
 
 from app.core.settings import settings
@@ -12,8 +15,24 @@ from app.schemas.stream import StreamResponse, WebRTCConfig
 class StreamPreparationService:
     def __init__(self, mediamtx: MediaMTXClient | None = None) -> None:
         self._mediamtx = mediamtx or MediaMTXClient()
+        self._cleanup_lock = threading.Lock()
+        self._managed_paths: set[str] = set()
+        self._logger = logging.getLogger(__name__)
+        self._cleanup_thread: threading.Thread | None = None
+        if settings.idle_room_cleanup_seconds > 0:
+            self._cleanup_thread = threading.Thread(
+                target=self._cleanup_loop,
+                daemon=True,
+                name="stream-room-cleanup",
+            )
+            self._cleanup_thread.start()
 
-    def prepare_stream(self, user_id: str, device_name: str) -> StreamResponse:
+    def prepare_stream(
+        self,
+        user_id: str,
+        device_name: str,
+        viewer_token: str | None = None,
+    ) -> StreamResponse:
         if not validate_user_access(user_id, device_name):
             raise HTTPException(status_code=403, detail="Sem permissao")
 
@@ -26,25 +45,26 @@ class StreamPreparationService:
         if not self._mediamtx.path_exists(device_name):
             self._mediamtx.create_path(device_name, rtsp_source)
 
-        self._mediamtx.wait_until_ready(device_name)
+        self._mediamtx.wait_until_ready(
+            device_name,
+            timeout_seconds=settings.mediamtx_ready_timeout_seconds,
+        )
+        webrtc_auth = self._build_webrtc_auth(viewer_token)
+        with self._cleanup_lock:
+            self._managed_paths.add(device_name)
 
         return StreamResponse(
             device=device_name,
             viewers=viewers,
-            webrtc=WebRTCConfig(
-                url=(
-                    f"http://{settings.public_webrtc_host}:"
-                    f"{settings.webrtc_port}/{device_name}/whep"
-                ),
-                username=settings.webrtc_user,
-                password=settings.webrtc_pass,
-            ),
+            webrtc=WebRTCConfig(url=self._build_webrtc_url(device_name), **webrtc_auth),
         )
 
-    def cleanup_if_idle(self, device_name: str) -> None:
+    def cleanup_if_idle(self, device_name: str) -> bool:
         viewers = self._mediamtx.get_viewer_count(device_name)
         if viewers == 0 and self._mediamtx.path_exists(device_name):
             self._mediamtx.remove_path(device_name)
+            return True
+        return False
 
     @staticmethod
     def _get_rtsp_source(device_name: str) -> str:
@@ -55,3 +75,55 @@ class StreamPreparationService:
                 detail=f"Camera '{device_name}' nao cadastrada",
             )
         return rtsp
+
+    @staticmethod
+    def _build_webrtc_url(device_name: str) -> str:
+        return (
+            f"http://{settings.public_webrtc_host}:"
+            f"{settings.webrtc_port}/{device_name}/whep"
+        )
+
+    def _build_webrtc_auth(self, viewer_token: str | None) -> dict:
+        if settings.auth_provider != "keycloak":
+            return {
+                "auth_type": "basic",
+                "username": settings.webrtc_user,
+                "password": settings.webrtc_pass,
+                "token": None,
+            }
+
+        if not viewer_token:
+            raise HTTPException(
+                status_code=401,
+                detail="Sessao Keycloak ausente ou expirada",
+            )
+
+        return {
+            "auth_type": "bearer",
+            "username": None,
+            "password": None,
+            "token": viewer_token,
+        }
+
+    def _cleanup_loop(self) -> None:
+        interval = max(2, settings.idle_room_cleanup_seconds)
+        while True:
+            time.sleep(interval)
+            with self._cleanup_lock:
+                managed = set(self._managed_paths)
+            # Also scan known camera path names, so cleanup still works after API restarts.
+            paths = sorted(managed.union(CAMERAS.keys()))
+
+            for device_name in paths:
+                try:
+                    removed = self.cleanup_if_idle(device_name)
+                    exists = self._mediamtx.path_exists(device_name)
+                    if removed or not exists:
+                        with self._cleanup_lock:
+                            self._managed_paths.discard(device_name)
+                except Exception as exc:
+                    self._logger.warning(
+                        "Idle cleanup check failed for %s: %s",
+                        device_name,
+                        exc,
+                    )

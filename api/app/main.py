@@ -24,8 +24,12 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=FRONT_DIR), name="static")
 
     @app.get("/", include_in_schema=False)
-    def frontend():
+    def login_page():
         return FileResponse(os.path.join(FRONT_DIR, "index.html"))
+
+    @app.get("/player", include_in_schema=False)
+    def player_page():
+        return FileResponse(os.path.join(FRONT_DIR, "player.html"))
 
     return app
 
