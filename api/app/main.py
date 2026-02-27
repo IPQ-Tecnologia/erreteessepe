@@ -5,10 +5,31 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router as stream_router
-FRONT_DIR = "/app/front"
+
+
+def _resolve_front_dir() -> str:
+    configured = os.getenv("FRONT_DIR")
+    candidates = []
+    if configured:
+        candidates.append(configured)
+    candidates.extend(
+        [
+            "/app/front",
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../front")),
+        ]
+    )
+
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+
+    raise RuntimeError(
+        "Frontend directory not found. Set FRONT_DIR or provide /app/front or ./front."
+    )
 
 
 def create_app() -> FastAPI:
+    front_dir = _resolve_front_dir()
     app = FastAPI(title="RTSP to WebRTC API")
     app.add_middleware(
         CORSMiddleware,
@@ -19,17 +40,15 @@ def create_app() -> FastAPI:
     )
     app.include_router(stream_router)
 
-    if not os.path.isdir(FRONT_DIR):
-        raise RuntimeError(f"Directory '{FRONT_DIR}' does not exist")
-    app.mount("/static", StaticFiles(directory=FRONT_DIR), name="static")
+    app.mount("/static", StaticFiles(directory=front_dir), name="static")
 
     @app.get("/", include_in_schema=False)
     def login_page():
-        return FileResponse(os.path.join(FRONT_DIR, "index.html"))
+        return FileResponse(os.path.join(front_dir, "index.html"))
 
     @app.get("/player", include_in_schema=False)
     def player_page():
-        return FileResponse(os.path.join(FRONT_DIR, "player.html"))
+        return FileResponse(os.path.join(front_dir, "player.html"))
 
     return app
 

@@ -41,3 +41,8 @@ services:
       - mediamtx
     env_file:
       - ./.env
+    environment:
+      # Container-to-container DNS for Docker network.
+      MEDIAMTX_HOST: mediamtx
+      MEDIAMTX_API: http://mediamtx:9997
+      KEYCLOAK_BASE_URL: http://keycloak:8080

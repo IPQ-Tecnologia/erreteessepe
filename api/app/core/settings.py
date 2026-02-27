@@ -28,8 +28,8 @@ class Settings:
 
 settings = Settings(
     auth_provider=os.getenv("AUTH_PROVIDER", "keycloak"),
-    mediamtx_host=os.getenv("MEDIAMTX_HOST", "mediamtx"),
-    mediamtx_api=os.getenv("MEDIAMTX_API", "http://mediamtx:9997"),
+    mediamtx_host=os.getenv("MEDIAMTX_HOST", "localhost"),
+    mediamtx_api=os.getenv("MEDIAMTX_API", "http://localhost:9997"),
     rtsp_port=int(os.getenv("RTSP_PORT", "8554")),
     webrtc_port=int(os.getenv("WEBRTC_PORT", "8889")),
     mediamtx_api_user=os.getenv("MEDIAMTX_API_USER", "backend"),
