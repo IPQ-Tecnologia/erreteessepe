@@ -15,7 +15,6 @@ webrtcAllowOrigins:
 webrtcAdditionalHosts:
   - localhost
   - 127.0.0.1
-  - host.docker.internal
 
 webrtcLocalTCPAddress: :8189
 

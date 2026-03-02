@@ -27,6 +27,8 @@ services:
     image: bluenviron/mediamtx:1.15.4
     container_name: mediamtx
     restart: unless-stopped
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_WEBRTC_HOST:-localhost}
     ports:
       - "8554:8554"      # RTSP
       - "8888:8888"      # HLS fallback
