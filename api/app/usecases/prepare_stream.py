@@ -5,16 +5,23 @@ import threading
 import time
 from fastapi import HTTPException
 
+from app.core.http_errors import http_error
 from app.core.settings import settings
 from app.domain.access_control import validate_user_access
 from app.domain.cameras import CAMERAS
 from app.infrastructure.mediamtx_client import MediaMTXClient
+from app.infrastructure.rtsp_probe import RTSPProbe
 from app.schemas.stream import StreamResponse, WebRTCConfig
 
 
 class StreamPreparationService:
-    def __init__(self, mediamtx: MediaMTXClient | None = None) -> None:
+    def __init__(
+        self,
+        mediamtx: MediaMTXClient | None = None,
+        rtsp_probe: RTSPProbe | None = None,
+    ) -> None:
         self._mediamtx = mediamtx or MediaMTXClient()
+        self._rtsp_probe = rtsp_probe or RTSPProbe()
         self._cleanup_lock = threading.Lock()
         self._managed_paths: set[str] = set()
         self._logger = logging.getLogger(__name__)
@@ -42,7 +49,11 @@ class StreamPreparationService:
         if viewers >= settings.max_viewers:
             raise HTTPException(status_code=429, detail="Limite de viewers atingido")
 
-        if not self._mediamtx.path_exists(device_name):
+        path_info = self._mediamtx.get_path_info(device_name)
+        if not path_info or not path_info.get("ready"):
+            self._rtsp_probe.ensure_source_available(rtsp_source)
+
+        if not path_info:
             self._mediamtx.create_path(device_name, rtsp_source)
 
         self._mediamtx.wait_until_ready(
@@ -70,9 +81,10 @@ class StreamPreparationService:
     def _get_rtsp_source(device_name: str) -> str:
         rtsp = CAMERAS.get(device_name)
         if not rtsp:
-            raise HTTPException(
+            raise http_error(
                 status_code=404,
-                detail=f"Camera '{device_name}' nao cadastrada",
+                code="camera_not_found",
+                message=f"Camera '{device_name}' nao cadastrada.",
             )
         return rtsp
 

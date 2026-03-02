@@ -3,9 +3,9 @@ from __future__ import annotations
 import time
 
 import requests
-from fastapi import HTTPException
 from requests import RequestException
 
+from app.core.http_errors import http_error
 from app.core.settings import settings
 from app.infrastructure.keycloak_client import KeycloakClient
 
@@ -21,7 +21,11 @@ class MediaMTXClient:
         if response.status_code == 404:
             return False
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Erro ao consultar MediaMTX")
+            raise http_error(
+                status_code=502,
+                code="mediamtx_query_failed",
+                message="Erro ao consultar o MediaMTX.",
+            )
         return True
 
     def get_path_info(self, device_name: str) -> dict:
@@ -29,9 +33,10 @@ class MediaMTXClient:
         if response.status_code == 404:
             return {}
         if response.status_code != 200:
-            raise HTTPException(
-                status_code=500,
-                detail="Erro ao consultar status da camera no MediaMTX",
+            raise http_error(
+                status_code=502,
+                code="mediamtx_query_failed",
+                message="Erro ao consultar o status da camera no MediaMTX.",
             )
         return response.json()
 
@@ -43,9 +48,10 @@ class MediaMTXClient:
                 return
             time.sleep(0.4)
 
-        raise HTTPException(
+        raise http_error(
             status_code=504,
-            detail="A camera nao ficou pronta a tempo no MediaMTX",
+            code="camera_start_timeout",
+            message="A camera respondeu, mas o stream nao ficou pronto a tempo no MediaMTX.",
         )
 
     def create_path(self, device_name: str, rtsp_source: str) -> None:
@@ -59,10 +65,18 @@ class MediaMTXClient:
                 timeout=self._timeout,
             )
         except RequestException as exc:
-            raise HTTPException(status_code=503, detail="MediaMTX indisponivel") from exc
+            raise http_error(
+                status_code=503,
+                code="mediamtx_unavailable",
+                message="MediaMTX indisponivel.",
+            ) from exc
 
         if response.status_code not in (200, 201, 409):
-            raise HTTPException(status_code=500, detail=response.text)
+            raise http_error(
+                status_code=502,
+                code="mediamtx_path_create_failed",
+                message="Nao foi possivel criar a rota da camera no MediaMTX.",
+            )
 
     def remove_path(self, device_name: str) -> None:
         try:
@@ -73,10 +87,18 @@ class MediaMTXClient:
                 timeout=self._timeout,
             )
         except RequestException as exc:
-            raise HTTPException(status_code=503, detail="MediaMTX indisponivel") from exc
+            raise http_error(
+                status_code=503,
+                code="mediamtx_unavailable",
+                message="MediaMTX indisponivel.",
+            ) from exc
 
         if response.status_code not in (200, 201, 204):
-            raise HTTPException(status_code=500, detail=response.text)
+            raise http_error(
+                status_code=502,
+                code="mediamtx_path_delete_failed",
+                message="Nao foi possivel remover a rota da camera no MediaMTX.",
+            )
 
     def get_viewer_count(self, device_name: str) -> int:
         try:
@@ -106,7 +128,11 @@ class MediaMTXClient:
                 timeout=self._timeout,
             )
         except RequestException as exc:
-            raise HTTPException(status_code=503, detail="MediaMTX indisponivel") from exc
+            raise http_error(
+                status_code=503,
+                code="mediamtx_unavailable",
+                message="MediaMTX indisponivel.",
+            ) from exc
 
     def _auth_headers(self) -> dict | None:
         if settings.auth_provider != "keycloak":

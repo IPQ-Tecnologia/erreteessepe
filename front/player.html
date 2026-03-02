@@ -151,6 +151,20 @@
             console.log(`[Player] ${msg}`);
         }
 
+        async function readErrorMessage(response, fallbackMessage) {
+            const contentType = response.headers.get('content-type') || '';
+
+            if (contentType.includes('application/json')) {
+                const payload = await response.json().catch(() => null);
+                const detail = payload?.detail;
+                if (typeof detail === 'string' && detail) return detail;
+                if (detail && typeof detail.message === 'string' && detail.message) return detail.message;
+            }
+
+            const bodyText = await response.text().catch(() => '');
+            return bodyText || fallbackMessage;
+        }
+
         async function ensureSession() {
             const response = await fetch('/auth/me', { credentials: 'include' });
             if (!response.ok) {
@@ -206,7 +220,12 @@
                 log(`Buscando config para: ${cameraId}...`);
                 const configResponse = await fetch(`/stream/${cameraId}`, { credentials: 'include' });
 
-                if (!configResponse.ok) throw new Error(`Erro na API Python: ${configResponse.status}`);
+                if (!configResponse.ok) {
+                    throw new Error(await readErrorMessage(
+                        configResponse,
+                        `Erro na API Python: ${configResponse.status}`
+                    ));
+                }
 
                 const configData = await configResponse.json();
 
@@ -254,7 +273,12 @@
                     body: pc.localDescription.sdp
                 });
 
-                if (!whepResponse.ok) throw new Error(`Erro no MediaMTX: ${whepResponse.status}`);
+                if (!whepResponse.ok) {
+                    throw new Error(await readErrorMessage(
+                        whepResponse,
+                        `Erro no MediaMTX: ${whepResponse.status}`
+                    ));
+                }
 
                 const answerSdp = await whepResponse.text();
                 await pc.setRemoteDescription(new RTCSessionDescription({
