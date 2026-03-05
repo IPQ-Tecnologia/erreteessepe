@@ -22,7 +22,8 @@ webrtcICEServers2:
   - url: stun:stun.l.google.com:19302
 
 authMethod: jwt
-authJWTJWKS: http://keycloak:8080/realms/mediamtx/protocol/openid-connect/certs
+# authJWTJWKS: http://keycloak:8080/realms/mediamtx/protocol/openid-connect/certs
+authJWTJWKS: https://taticokey.spocws.icu/realms/tatico/protocol/openid-connect/certs
 authJWTClaimKey: mediamtx_permissions
 
 paths:

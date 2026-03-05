@@ -208,6 +208,28 @@
             });
         }
 
+        function normalizeIceServers(iceServers) {
+            if (!Array.isArray(iceServers) || iceServers.length === 0) {
+                return [{ urls: 'stun:stun.l.google.com:19302' }];
+            }
+
+            return iceServers
+                .map((server) => {
+                    const urls = Array.isArray(server?.urls)
+                        ? server.urls.filter(Boolean)
+                        : (server?.urls ? [server.urls] : []);
+
+                    if (urls.length === 0) return null;
+
+                    return {
+                        urls: urls.length === 1 ? urls[0] : urls,
+                        username: server.username || undefined,
+                        credential: server.credential || undefined,
+                    };
+                })
+                .filter(Boolean);
+        }
+
         async function startStream() {
             const cameraId = inputId.value.trim();
             if (!cameraId) return alert('Digite um ID de câmera');
@@ -218,7 +240,10 @@
 
             try {
                 log(`Buscando config para: ${cameraId}...`);
-                const configResponse = await fetch(`/stream/${cameraId}`, { credentials: 'include' });
+                const configResponse = await fetch(
+                    `/api/stream/${cameraId}`,
+                    { credentials: 'include' }
+                );
 
                 if (!configResponse.ok) {
                     throw new Error(await readErrorMessage(
@@ -229,14 +254,24 @@
 
                 const configData = await configResponse.json();
 
-                let { url: signalingUrl, auth_type: authType, username, password, token } = configData.webrtc;
+                let {
+                    url: signalingUrl,
+                    auth_type: authType,
+                    username,
+                    password,
+                    token,
+                    ice_servers: configuredIceServers
+                } = configData.webrtc;
 
                 if (!signalingUrl.endsWith('/whep')) {
                     signalingUrl = signalingUrl.replace(/\/$/, '') + '/whep';
                 }
 
+                const iceServers = normalizeIceServers(configuredIceServers);
+                log(`Usando ${iceServers.length} ICE server(s)...`);
+
                 pc = new RTCPeerConnection({
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                    iceServers
                 });
 
                 pc.addTransceiver('video', { direction: 'recvonly' });

@@ -6,7 +6,7 @@ _client = MediaMTXClient()
 
 
 def get_rtsp_source(device_name: str) -> str:
-    return _service._get_rtsp_source(device_name)
+    return _service.get_rtsp_source(device_name)
 
 
 def path_exists(device_name: str) -> bool:

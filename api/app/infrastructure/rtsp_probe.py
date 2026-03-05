@@ -18,7 +18,7 @@ class RTSPProbe:
             raise http_error(
                 status_code=502,
                 code="camera_url_invalid",
-                message="A URL RTSP configurada para a camera esta invalida.",
+                message="RTSP URL is invalid. It must have the rtsp scheme and a valid host.",
             )
 
         if not shutil.which(self._ffprobe_bin):
@@ -48,9 +48,9 @@ class RTSPProbe:
             )
         except subprocess.TimeoutExpired as exc:
             raise http_error(
-                status_code=503,
+                status_code=400,
                 code="camera_offline",
-                message="A camera esta offline ou nao respondeu na rede.",
+                message="The camera is offline or not responding on the network.",
             ) from exc
         except OSError:
             return
@@ -76,7 +76,7 @@ class RTSPProbe:
             return http_error(
                 status_code=502,
                 code="camera_auth_failed",
-                message="Nao foi possivel autenticar na camera. Verifique as credenciais da URL RTSP.",
+                message="It was not possible to authenticate with the camera. Please check the credentials in the RTSP URL.",
             )
 
         if any(
@@ -93,7 +93,7 @@ class RTSPProbe:
             return http_error(
                 status_code=502,
                 code="camera_url_invalid",
-                message="A URL RTSP configurada para a camera nao existe ou esta incorreta.",
+                message="The RTSP URL configured for the camera does not exist or is incorrect.",
             )
 
         if any(
@@ -107,9 +107,9 @@ class RTSPProbe:
             )
         ):
             return http_error(
-                status_code=503,
+                status_code=400,
                 code="camera_offline",
-                message="A camera esta offline ou inacessivel na rede.",
+                message="The camera is offline or not accessible on the network.",
             )
 
         if any(
@@ -124,11 +124,11 @@ class RTSPProbe:
             return http_error(
                 status_code=502,
                 code="camera_url_invalid",
-                message="O host configurado na URL RTSP da camera nao existe.",
+                message="The host configured in the camera's RTSP URL does not exist.",
             )
 
         return http_error(
             status_code=502,
             code="camera_stream_unavailable",
-            message="Nao foi possivel abrir a fonte RTSP da camera.",
+            message="It was not possible to open the RTSP source for the camera.",
         )

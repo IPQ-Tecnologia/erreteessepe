@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Header, HTTPException, Response, status
 
 from app.core.settings import settings
 from app.core.session_store import SessionStore
@@ -48,8 +48,7 @@ def me(stream_session: str | None = Cookie(None, alias=SESSION_COOKIE_NAME)):
     session = session_store.get(stream_session)
     if not session:
         return MeResponse(authenticated=False)
-    return MeResponse(authenticated=True, username=session.username)
-
+    return MeResponse(authenticated=True, username=session.username, access_token=session.token)
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(response: Response, stream_session: str | None = Cookie(None, alias=SESSION_COOKIE_NAME)):
@@ -74,6 +73,35 @@ def get_stream(
         return service.prepare_stream(
             user_id=user_id,
             device_name=device_name,
+            viewer_token=viewer_token,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Erro interno") from exc
+
+
+@router.get("/api/stream/{camera}", response_model=StreamResponse)
+def get_stream_by_query(
+    camera: str,
+    authorization: str | None = Header(None),
+):
+    viewer_token = None
+    user_id = "anonymous"
+
+    print(f"Authorization header: {authorization}") 
+
+    if settings.auth_provider == "keycloak":
+        if not authorization or not authorization.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail="Token Bearer ausente")
+        viewer_token = authorization.split(" ", 1)[1]
+        user_id = "bearer_user"
+    print(f"Extracted viewer_token: {viewer_token}")
+    print(f"Extracted user_id: {user_id}")
+    try:
+        return service.prepare_stream(
+            user_id=user_id,
+            device_name=camera,
             viewer_token=viewer_token,
         )
     except HTTPException:

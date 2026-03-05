@@ -1,0 +1,79 @@
+(.venv) vicentedamasceno@Vicentes-MacBook-Air erreteessepe % docker logs stream-api      
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     172.19.0.1:49886 - "GET /player HTTP/1.1" 200 OK
+INFO:     172.19.0.1:49886 - "GET /auth/me HTTP/1.1" 200 OK
+INFO:     172.19.0.1:49886 - "GET /auth/me HTTP/1.1" 200 OK
+INFO:     172.19.0.1:49886 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     172.19.0.1:49886 - "GET /auth/me HTTP/1.1" 200 OK
+INFO:     172.19.0.1:45520 - "GET /stream/camera01 HTTP/1.1" 200 OK
+(.venv) vicentedamasceno@Vicentes-MacBook-Air erreteessepe % docker logs mediamtx        
+2026/03/03 17:49:46 INF MediaMTX v1.15.4
+2026/03/03 17:49:46 INF configuration loaded from /mediamtx.yml
+2026/03/03 17:49:46 INF [RTSP] listener opened on :8554 (TCP), :8000 (UDP/RTP), :8001 (UDP/RTCP)
+2026/03/03 17:49:46 INF [RTMP] listener opened on :1935
+2026/03/03 17:49:46 INF [HLS] listener opened on :8888
+2026/03/03 17:49:46 INF [WebRTC] listener opened on :8889 (HTTP), :8189 (ICE/UDP), :8189 (ICE/TCP)
+2026/03/03 17:49:46 INF [SRT] listener opened on :8890 (UDP)
+2026/03/03 17:49:46 INF [API] listener opened on :9997
+2026/03/03 17:50:02 ERR [API] path not found
+2026/03/03 17:50:04 INF reloading configuration (API request)
+2026/03/03 17:50:04 INF [path camera01] [RTSP source] started
+2026/03/03 17:50:04 INF [path camera01] [RTSP source] ready: 1 track (H264)
+2026/03/03 17:50:04 INF [WebRTC] [session 9c14c004] created by 172.19.0.1:46866
+2026/03/03 17:50:07 ERR [API] path not found
+2026/03/03 17:50:07 ERR [API] path not found
+2026/03/03 17:50:07 ERR [API] path not found
+2026/03/03 17:50:07 ERR [API] path not found
+2026/03/03 17:50:07 ERR [API] path not found
+2026/03/03 17:50:07 ERR [API] path not found
+2026/03/03 17:50:07 WAR [path camera01] [RTSP source] no UDP packets received, switching to TCP
+2026/03/03 17:50:14 INF [WebRTC] [session 9c14c004] closed: deadline exceeded while waiting connection
+2026/03/03 17:50:27 INF reloading configuration (API request)
+2026/03/03 17:50:27 INF [path camera01] [RTSP source] stopped: path is closing
+2026/03/03 17:50:27 ERR [API] path not found
+2026/03/03 17:50:27 ERR [API] path not found
+2026/03/03 17:50:27 ERR [API] path not found
+2026/03/03 17:50:27 ERR [API] path not found
+2026/03/03 17:50:27 ERR [API] path not found
+2026/03/03 17:50:27 ERR [API] path not found
+2026/03/03 17:50:27 ERR [API] path not found
+(.venv) vicentedamasceno@Vicentes-MacBook-Air erreteessepe % docker logs keycloak        
+Updating the configuration and installing your custom providers, if any. Please wait.
+2026-03-03 17:49:34,386 INFO  [io.qua.dep.QuarkusAugmentor] (main) Quarkus augmentation completed in 3133ms
+2026-03-03 17:49:35,935 INFO  [org.keycloak.quarkus.runtime.storage.infinispan.CacheManagerFactory] (main) Starting Infinispan embedded cache manager
+2026-03-03 17:49:36,005 INFO  [org.keycloak.quarkus.runtime.storage.infinispan.CacheManagerFactory] (main) Persistent user sessions enabled and no memory limit found in configuration. Setting max entries for sessions to 10000 entries.
+2026-03-03 17:49:36,005 INFO  [org.keycloak.quarkus.runtime.storage.infinispan.CacheManagerFactory] (main) Persistent user sessions enabled and no memory limit found in configuration. Setting max entries for clientSessions to 10000 entries.
+2026-03-03 17:49:36,005 INFO  [org.keycloak.quarkus.runtime.storage.infinispan.CacheManagerFactory] (main) Persistent user sessions enabled and no memory limit found in configuration. Setting max entries for offlineSessions to 10000 entries.
+2026-03-03 17:49:36,005 INFO  [org.keycloak.quarkus.runtime.storage.infinispan.CacheManagerFactory] (main) Persistent user sessions enabled and no memory limit found in configuration. Setting max entries for offlineClientSessions to 10000 entries.
+2026-03-03 17:49:36,147 INFO  [org.infinispan.CONTAINER] (ForkJoinPool.commonPool-worker-1) ISPN000556: Starting user marshaller 'org.infinispan.commons.marshall.ImmutableProtoStreamMarshaller'
+2026-03-03 17:49:36,451 INFO  [org.keycloak.connections.infinispan.DefaultInfinispanConnectionProviderFactory] (main) Node name: node_924687, Site name: null
+2026-03-03 17:49:36,822 INFO  [org.keycloak.quarkus.runtime.storage.database.liquibase.QuarkusJpaUpdaterProvider] (main) Initializing database schema. Using changelog META-INF/jpa-changelog-master.xml
+
+UPDATE SUMMARY
+Run:                        148
+Previously run:               0
+Filtered out:                 0
+-------------------------------
+Total change sets:          148
+
+2026-03-03 17:49:38,440 WARN  [io.agroal.pool] (main) Datasource '<default>': JDBC resources leaked: 1 ResultSet(s) and 0 Statement(s)
+2026-03-03 17:49:39,397 INFO  [org.keycloak.broker.provider.AbstractIdentityProviderMapper] (main) Registering class org.keycloak.broker.provider.mappersync.ConfigSyncEventListener
+2026-03-03 17:49:39,490 INFO  [org.keycloak.exportimport.dir.DirImportProvider] (main) Importing from directory /opt/keycloak/bin/../data/import
+2026-03-03 17:49:39,493 INFO  [org.keycloak.services] (main) KC-SERVICES0050: Initializing master realm
+2026-03-03 17:49:40,223 INFO  [org.keycloak.exportimport.singlefile.SingleFileImportProvider] (main) Full importing from file /opt/keycloak/bin/../data/import/realm-mediamtx.json
+2026-03-03 17:49:41,052 INFO  [org.keycloak.exportimport.util.ImportUtils] (main) Realm 'mediamtx' imported
+2026-03-03 17:49:41,052 INFO  [org.keycloak.services] (main) KC-SERVICES0030: Full model import requested. Strategy: OVERWRITE_EXISTING
+2026-03-03 17:49:41,052 INFO  [org.keycloak.services] (main) KC-SERVICES0032: Import finished successfully
+2026-03-03 17:49:41,052 WARN  [org.keycloak.services] (main) KC-SERVICES0110: Environment variable 'KEYCLOAK_ADMIN' is deprecated, use 'KC_BOOTSTRAP_ADMIN_USERNAME' instead
+2026-03-03 17:49:41,052 WARN  [org.keycloak.services] (main) KC-SERVICES0110: Environment variable 'KEYCLOAK_ADMIN_PASSWORD' is deprecated, use 'KC_BOOTSTRAP_ADMIN_PASSWORD' instead
+2026-03-03 17:49:41,103 INFO  [org.keycloak.services] (main) KC-SERVICES0077: Created temporary admin user with username admin
+2026-03-03 17:49:41,127 WARN  [io.agroal.pool] (main) Datasource '<default>': JDBC resources leaked: 1 ResultSet(s) and 0 Statement(s)
+2026-03-03 17:49:41,185 INFO  [io.quarkus] (main) Keycloak 26.0.8 on JVM (powered by Quarkus 3.15.1) started in 6.718s. Listening on: http://0.0.0.0:8080
+2026-03-03 17:49:41,186 INFO  [io.quarkus] (main) Profile dev activated. 
+2026-03-03 17:49:41,186 INFO  [io.quarkus] (main) Installed features: [agroal, cdi, hibernate-orm, jdbc-h2, keycloak, narayana-jta, opentelemetry, reactive-routes, rest, rest-jackson, smallrye-context-propagation, vertx]
+2026-03-03 17:49:41,188 WARN  [org.keycloak.quarkus.runtime.KeycloakMain] (main) Running the server in development mode. DO NOT use this configuration in production.
+2026-03-03 17:49:57,512 WARN  [org.keycloak.cookie.DefaultCookieProvider] (executor-thread-1) Non-secure context detected; cookies are not secured, and will not be available in cross-origin POST requests
+2026-03-03 17:50:02,793 WARN  [org.keycloak.cookie.DefaultCookieProvider] (executor-thread-1) Non-secure context detected; cookies are not secured, and will not be available in cross-origin POST requests

@@ -1,0 +1,41 @@
+services:
+  turn:
+    image: coturn/coturn:4.8.0-r1
+    container_name: coturn
+    restart: unless-stopped
+    command:
+      - -n
+      - --log-file=stdout
+      - --fingerprint
+      - --lt-cred-mech
+      - --realm=${TURN_PUBLIC_IP:?Set TURN_PUBLIC_IP to your host LAN IP}
+      - --user=${TURN_USERNAME}:${TURN_PASSWORD}
+      - --listening-ip=0.0.0.0
+      - --listening-port=${TURN_PORT}
+      - --external-ip=${TURN_PUBLIC_IP}
+      - --min-port=49160
+      - --max-port=49200
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+    ports:
+      - "${TURN_PORT}:${TURN_PORT}"
+      - "${TURN_PORT}:${TURN_PORT}/udp"
+      - "49160-49200:49160-49200/udp"
+
+  mediamtx:
+    depends_on:
+      turn:
+        condition: service_started
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_WEBRTC_HOST:-localhost},127.0.0.1,${TURN_PUBLIC_IP}
+      MTX_WEBRTCICESERVERS2_0_URL: ${WEBRTC_STUN_SERVER:-stun:stun.l.google.com:19302}
+      MTX_WEBRTCICESERVERS2_1_URL: turn:${TURN_PUBLIC_IP}:${TURN_PORT}?transport=udp
+      MTX_WEBRTCICESERVERS2_1_USERNAME: ${TURN_USERNAME}
+      MTX_WEBRTCICESERVERS2_1_PASSWORD: ${TURN_PASSWORD}
+      MTX_WEBRTCICESERVERS2_1_CLIENTONLY: yes
+      MTX_WEBRTCICESERVERS2_2_URL: turn:${TURN_PUBLIC_IP}:${TURN_PORT}?transport=tcp
+      MTX_WEBRTCICESERVERS2_2_USERNAME: ${TURN_USERNAME}
+      MTX_WEBRTCICESERVERS2_2_PASSWORD: ${TURN_PASSWORD}
+      MTX_WEBRTCICESERVERS2_2_CLIENTONLY: yes

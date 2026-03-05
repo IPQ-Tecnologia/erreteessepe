@@ -14,4 +14,5 @@ class LoginResponse(BaseModel):
 class MeResponse(BaseModel):
     authenticated: bool
     username: str | None = None
+    access_token: str | None = None
 
