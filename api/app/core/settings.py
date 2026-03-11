@@ -4,16 +4,34 @@ import os
 from dataclasses import dataclass
 
 
+def _clean_env_value(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1].strip()
+    return value
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
         return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return _clean_env_value(raw).lower() in {"1", "true", "yes", "on"}
+
+
+def _env_text(name: str, default: str = "") -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = _clean_env_value(raw)
+    if not value:
+        return default
+    return value
 
 
 @dataclass(frozen=True)
 class Settings:
     auth_provider: str
+    media_auth_mode: str
     mediamtx_host: str
     mediamtx_api: str
     camera_redis_url: str
@@ -40,10 +58,29 @@ class Settings:
     keycloak_realm: str
     keycloak_client_id: str
     keycloak_client_secret: str
+    keycloak_issuer: str
+    keycloak_jwks_url: str
+    keycloak_certificate: str
+    keycloak_jwks_cache_ttl_seconds: int
+    stream_roles_claim_path: str
+    stream_access_role: str
+    mediamtx_jwt_issuer: str
+    mediamtx_jwt_private_key: str
+    mediamtx_jwt_private_key_path: str
+    mediamtx_jwt_kid: str
+    mediamtx_jwt_ttl_seconds: int
+    mediamtx_api_token_ttl_seconds: int
+    mediamtx_admin_subject: str
 
+
+_keycloak_base_url = _env_text("KEYCLOAK_BASE_URL", "http://localhost:8080").rstrip("/")
+_keycloak_realm = _env_text("KEYCLOAK_REALM", "mediamtx")
+_keycloak_client_id = _env_text("KEYCLOAK_CLIENT_ID", "mediamtx")
+_keycloak_issuer = f"{_keycloak_base_url}/realms/{_keycloak_realm}"
 
 settings = Settings(
     auth_provider=os.getenv("AUTH_PROVIDER", "keycloak"),
+    media_auth_mode=_env_text("MEDIA_AUTH_MODE", "internal_jwt"),
     mediamtx_host=os.getenv("MEDIAMTX_HOST", "localhost"),
     mediamtx_api=os.getenv("MEDIAMTX_API", "http://localhost:9997"),
     camera_redis_url=os.getenv("CAMERA_REDIS_URL", "").strip(),
@@ -62,12 +99,29 @@ settings = Settings(
     turn_port=int(os.getenv("TURN_PORT", "3478")),
     turn_username=os.getenv("TURN_USERNAME", "turnuser"),
     turn_password=os.getenv("TURN_PASSWORD", "turnpassword"),
-    max_viewers=int(os.getenv("MAX_VIEWERS", "5")),
+    max_viewers=int(os.getenv("MAX_VIEWERS", "20")),
     mediamtx_ready_timeout_seconds=float(os.getenv("MEDIAMTX_READY_TIMEOUT_SECONDS", "20")),
     idle_room_cleanup_seconds=int(os.getenv("IDLE_ROOM_CLEANUP_SECONDS", "20")),
     mediamtx_source_close_after=os.getenv("MEDIAMTX_SOURCE_CLOSE_AFTER", "20s"),
-    keycloak_base_url=os.getenv("KEYCLOAK_BASE_URL", "http://localhost:8080"),
-    keycloak_realm=os.getenv("KEYCLOAK_REALM", "mediamtx"),
-    keycloak_client_id=os.getenv("KEYCLOAK_CLIENT_ID", "mediamtx"),
-    keycloak_client_secret=os.getenv("KEYCLOAK_CLIENT_SECRET", "mediamtx-dev-secret"),
+    keycloak_base_url=_keycloak_base_url,
+    keycloak_realm=_keycloak_realm,
+    keycloak_client_id=_keycloak_client_id,
+    keycloak_client_secret=_env_text("KEYCLOAK_CLIENT_SECRET", "mediamtx-dev-secret"),
+    keycloak_issuer=_keycloak_issuer,
+    keycloak_jwks_url=f"{_keycloak_issuer}/protocol/openid-connect/certs",
+    keycloak_certificate=_env_text("KEYCLOAK_CERTIFICATE", ""),
+    keycloak_jwks_cache_ttl_seconds=int(
+        os.getenv("KEYCLOAK_JWKS_CACHE_TTL_SECONDS", "300")
+    ),
+    stream_roles_claim_path=f"resource_access.{_keycloak_client_id}.roles,realm_access.roles",
+    stream_access_role=_env_text("STREAM_ACCESS_ROLE", "stream:read"),
+    mediamtx_jwt_issuer=_env_text("MEDIAMTX_JWT_ISSUER", "stream-api"),
+    mediamtx_jwt_private_key=_env_text("MEDIAMTX_JWT_PRIVATE_KEY", ""),
+    mediamtx_jwt_private_key_path=_env_text("MEDIAMTX_JWT_PRIVATE_KEY_PATH", ""),
+    mediamtx_jwt_kid=_env_text("MEDIAMTX_JWT_KID", "mediamtx-internal-dev"),
+    mediamtx_jwt_ttl_seconds=int(os.getenv("MEDIAMTX_JWT_TTL_SECONDS", "60")),
+    mediamtx_api_token_ttl_seconds=int(
+        os.getenv("MEDIAMTX_API_TOKEN_TTL_SECONDS", "60")
+    ),
+    mediamtx_admin_subject=_env_text("MEDIAMTX_ADMIN_SUBJECT", "mediamtx-admin"),
 )

@@ -38,12 +38,14 @@ def cleanup_if_idle(device_name: str):
 
 
 def prepare_stream(
-    user_id: str,
+    principal,
     device_name: str,
-    viewer_token: str | None = None,
+    whep_url: str,
+    client_auth_type: str,
 ) -> dict:
     return _service.prepare_stream(
-        user_id,
-        device_name,
-        viewer_token=viewer_token,
+        principal=principal,
+        device_name=device_name,
+        whep_url=whep_url,
+        client_auth_type=client_auth_type,
     ).model_dump()

@@ -8,6 +8,7 @@ from requests import RequestException
 from app.core.http_errors import http_error
 from app.core.settings import settings
 from app.infrastructure.keycloak_client import KeycloakClient
+from app.infrastructure.mediamtx_token_service import MediaMTXTokenService
 
 
 class MediaMTXClient:
@@ -15,6 +16,7 @@ class MediaMTXClient:
         self._base_url = settings.mediamtx_api
         self._timeout = 5
         self._keycloak_client = KeycloakClient()
+        self._token_service = MediaMTXTokenService()
 
     def path_exists(self, device_name: str) -> bool:
         response = self._get_path(device_name)
@@ -135,6 +137,9 @@ class MediaMTXClient:
             ) from exc
 
     def _auth_headers(self) -> dict | None:
+        if settings.media_auth_mode == "internal_jwt":
+            token = self._token_service.issue_api_token()
+            return {"Authorization": f"Bearer {token}"}
         if settings.auth_provider != "keycloak":
             return None
         token = self._keycloak_client.issue_token(
@@ -145,6 +150,8 @@ class MediaMTXClient:
 
     @staticmethod
     def _basic_auth() -> tuple[str, str] | None:
+        if settings.media_auth_mode == "internal_jwt":
+            return None
         if settings.auth_provider == "keycloak":
             return None
         return (settings.mediamtx_api_user, settings.mediamtx_api_pass)

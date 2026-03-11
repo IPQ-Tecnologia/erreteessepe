@@ -8,15 +8,7 @@ from app.core.http_errors import http_error
 from app.core.settings import settings
 from app.domain.camera_catalog import CameraDefinition
 from app.domain.cameras import CAMERAS
-
-try:
-    from redis import Redis
-    from redis.exceptions import RedisError
-except ImportError: 
-    Redis = None
-
-    class RedisError(Exception):
-        pass
+from app.infrastructure.redis_client import Redis, RedisError, redis_client
 
 
 class CameraCatalog:
@@ -144,21 +136,13 @@ class CameraCatalog:
         )
 
     def _client(self) -> Redis | None:
-        if Redis is None:
-            return None
         if self._redis_client is None:
-            self._redis_client = Redis.from_url(
-                settings.camera_redis_url,
-                socket_timeout=settings.camera_redis_timeout_seconds,
-                decode_responses=False,
-            )
+            self._redis_client = redis_client.get()
         return self._redis_client
 
     @staticmethod
     def _decode(value: Any) -> str:
-        if isinstance(value, bytes):
-            return value.decode()
-        return str(value)
+        return redis_client.decode(value)
 
     @staticmethod
     def _required_value(payload: dict[str, Any], *keys: str) -> str:
@@ -196,4 +180,3 @@ class CameraCatalog:
                 code="camera_catalog_invalid",
                 message=f"Field '{key}' is invalid in camera registration.",
             ) from exc
-

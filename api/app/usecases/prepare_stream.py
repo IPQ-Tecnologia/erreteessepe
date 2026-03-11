@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from fastapi import HTTPException
 
 from app.core.http_errors import http_error
 from app.core.settings import settings
@@ -12,6 +11,7 @@ from app.domain.cameras import CAMERAS
 from app.domain.rtsp import build_rtsp_url
 from app.infrastructure.camera_catalog import CameraCatalog
 from app.infrastructure.mediamtx_client import MediaMTXClient
+from app.infrastructure.principal_claims import VerifiedPrincipal
 from app.infrastructure.rtsp_probe import RTSPProbe
 from app.schemas.stream import ICEServer, StreamResponse, WebRTCConfig
 
@@ -40,18 +40,44 @@ class StreamPreparationService:
 
     def prepare_stream(
         self,
-        user_id: str,
+        principal: VerifiedPrincipal,
         device_name: str,
-        viewer_token: str | None = None,
+        whep_url: str,
+        client_auth_type: str,
     ) -> StreamResponse:
-        if not validate_user_access(user_id, device_name):
-            raise HTTPException(status_code=403, detail="Denied access to this camera")
+        viewers = self.ensure_stream_ready(principal, device_name)
+
+        return StreamResponse(
+            device=device_name,
+            viewers=viewers,
+            webrtc=WebRTCConfig(
+                url=whep_url,
+                ice_servers=self._build_ice_servers(),
+                **self._build_webrtc_auth(principal, client_auth_type),
+            ),
+        )
+
+    def ensure_stream_ready(
+        self,
+        principal: VerifiedPrincipal,
+        device_name: str,
+    ) -> int:
+        if not validate_user_access(principal.roles, device_name):
+            raise http_error(
+                status_code=403,
+                code="camera_access_denied",
+                message="Denied access to this camera",
+            )
 
         rtsp_source = self.get_rtsp_source(device_name)
 
         viewers = self._mediamtx.get_viewer_count(device_name)
         if viewers >= settings.max_viewers:
-            raise HTTPException(status_code=429, detail="Viewers limit reached")
+            raise http_error(
+                status_code=429,
+                code="viewers_limit_reached",
+                message="Viewers limit reached",
+            )
 
         path_info = self._mediamtx.get_path_info(device_name)
         if not path_info or not path_info.get("ready"):
@@ -64,19 +90,10 @@ class StreamPreparationService:
             device_name,
             timeout_seconds=settings.mediamtx_ready_timeout_seconds,
         )
-        webrtc_auth = self._build_webrtc_auth(viewer_token)
         with self._cleanup_lock:
             self._managed_paths.add(device_name)
 
-        return StreamResponse(
-            device=device_name,
-            viewers=viewers,
-            webrtc=WebRTCConfig(
-                url=self._build_webrtc_url(device_name),
-                ice_servers=self._build_ice_servers(),
-                **webrtc_auth,
-            ),
-        )
+        return viewers
 
     def cleanup_if_idle(self, device_name: str) -> bool:
         viewers = self._mediamtx.get_viewer_count(device_name)
@@ -96,14 +113,19 @@ class StreamPreparationService:
             )
         return rtsp
 
-    @staticmethod
-    def _build_webrtc_url(device_name: str) -> str:
-        return (
-            f"http://{settings.public_webrtc_host}:"
-            f"{settings.webrtc_port}/{device_name}/whep"
-        )
+    def _build_webrtc_auth(
+        self,
+        principal: VerifiedPrincipal,
+        client_auth_type: str,
+    ) -> dict:
+        if settings.media_auth_mode == "internal_jwt":
+            return {
+                "auth_type": client_auth_type,
+                "username": None,
+                "password": None,
+                "token": None,
+            }
 
-    def _build_webrtc_auth(self, viewer_token: str | None) -> dict:
         if settings.auth_provider != "keycloak":
             return {
                 "auth_type": "basic",
@@ -112,17 +134,18 @@ class StreamPreparationService:
                 "token": None,
             }
 
-        if not viewer_token:
-            raise HTTPException(
+        if not principal.external_token:
+            raise http_error(
                 status_code=401,
-                detail="Keycloak session missing or expired",
+                code="keycloak_session_missing_or_expired",
+                message="Keycloak session missing or expired",
             )
 
         return {
             "auth_type": "bearer",
             "username": None,
             "password": None,
-            "token": viewer_token,
+            "token": principal.external_token,
         }
 
     @staticmethod
@@ -136,15 +159,17 @@ class StreamPreparationService:
             return servers
 
         if not settings.turn_public_ip:
-            raise HTTPException(
+            raise http_error(
                 status_code=500,
-                detail="TURN enabled without TURN_PUBLIC_IP configured",
+                code="turn_public_ip_missing",
+                message="TURN enabled without TURN_PUBLIC_IP configured",
             )
 
         if not settings.turn_username or not settings.turn_password:
-            raise HTTPException(
+            raise http_error(
                 status_code=500,
-                detail="TURN enabled without TURN_USERNAME/TURN_PASSWORD configured",
+                code="turn_credentials_missing",
+                message="TURN enabled without TURN_USERNAME/TURN_PASSWORD configured",
             )
 
         turn_base = f"turn:{settings.turn_public_ip}:{settings.turn_port}"

@@ -241,7 +241,7 @@
             try {
                 log(`Buscando config para: ${cameraId}...`);
                 const configResponse = await fetch(
-                    `/api/stream/${cameraId}`,
+                    `/stream/${cameraId}`,
                     { credentials: 'include' }
                 );
 
@@ -304,6 +304,7 @@
 
                 const whepResponse = await fetch(signalingUrl, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: headers,
                     body: pc.localDescription.sdp
                 });

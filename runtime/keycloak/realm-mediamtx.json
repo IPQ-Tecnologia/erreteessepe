@@ -5,6 +5,13 @@
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "stream:read"
+      }
+    ]
+  },
   "clients": [
     {
       "clientId": "mediamtx",
@@ -18,7 +25,8 @@
       "serviceAccountsEnabled": false,
       "defaultClientScopes": [
         "profile",
-        "email"
+        "email",
+        "roles"
       ],
       "optionalClientScopes": [
         "address",
@@ -36,6 +44,9 @@
       "lastName": "Viewer",
       "email": "viewer@mediamtx.local",
       "emailVerified": true,
+      "realmRoles": [
+        "stream:read"
+      ],
       "credentials": [
         {
           "type": "password",

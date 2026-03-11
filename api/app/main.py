@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router as stream_router
+from app.infrastructure.mediamtx_token_service import MediaMTXTokenService
 
 
 def _resolve_front_dir() -> str:
@@ -30,6 +31,7 @@ def _resolve_front_dir() -> str:
 
 def create_app() -> FastAPI:
     front_dir = _resolve_front_dir()
+    mediamtx_token_service = MediaMTXTokenService()
     app = FastAPI(title="RTSP to WebRTC API")
     app.add_middleware(
         CORSMiddleware,
@@ -41,6 +43,10 @@ def create_app() -> FastAPI:
     app.include_router(stream_router)
 
     app.mount("/static", StaticFiles(directory=front_dir), name="static")
+
+    @app.get("/.well-known/jwks.json", include_in_schema=False)
+    def media_auth_jwks():
+        return mediamtx_token_service.jwks()
 
     @app.get("/", include_in_schema=False)
     def login_page():

@@ -9,50 +9,57 @@ from app.core.http_errors import http_error
 from app.infrastructure.redis_client import RedisError, redis_client
 
 
-SESSION_PREFIX = "stream_session:"
+WHEP_SESSION_PREFIX = "whep_session:"
 
 
 @dataclass(frozen=True)
-class SessionData:
+class WHEPSession:
     session_id: str
-    username: str
-    token: str
-    expires_at: int
+    subject: str
+    device_name: str
+    upstream_url: str
+    expires_at: float
 
 
-class SessionStore:
-    def create(self, username: str, token: str, expires_at: int) -> SessionData:
-        session = SessionData(
-            session_id=secrets.token_urlsafe(32),
-            username=username,
-            token=token,
-            expires_at=expires_at,
+class WHEPSessionStore:
+    def __init__(self, ttl_seconds: int = 3600) -> None:
+        self._ttl_seconds = max(60, ttl_seconds)
+
+    def create(self, subject: str, device_name: str, upstream_url: str) -> WHEPSession:
+        now = time.time()
+        session = WHEPSession(
+            session_id=secrets.token_urlsafe(24),
+            subject=subject,
+            device_name=device_name,
+            upstream_url=upstream_url,
+            expires_at=now + self._ttl_seconds,
         )
-        ttl_seconds = max(1, session.expires_at - int(time.time()))
         self._set(
             session.session_id,
             {
-                "username": session.username,
-                "token": session.token,
+                "subject": session.subject,
+                "device_name": session.device_name,
+                "upstream_url": session.upstream_url,
                 "expires_at": session.expires_at,
             },
-            ttl_seconds,
+            self._ttl_seconds,
         )
         return session
 
-    def get(self, session_id: str | None) -> SessionData | None:
+    def get(self, session_id: str | None) -> WHEPSession | None:
         if not session_id:
             return None
         payload = self._get(session_id)
         if payload is None:
             return None
-        session = SessionData(
+        session = WHEPSession(
             session_id=session_id,
-            username=str(payload.get("username") or ""),
-            token=str(payload.get("token") or ""),
-            expires_at=int(payload.get("expires_at") or 0),
+            subject=str(payload.get("subject") or ""),
+            device_name=str(payload.get("device_name") or ""),
+            upstream_url=str(payload.get("upstream_url") or ""),
+            expires_at=float(payload.get("expires_at") or 0),
         )
-        if session.expires_at <= int(time.time()):
+        if session.expires_at <= time.time():
             self.delete(session.session_id)
             return None
         return session
@@ -66,22 +73,19 @@ class SessionStore:
         except RedisError as exc:
             raise http_error(
                 status_code=503,
-                code="session_store_unavailable",
-                message="Session store indisponivel.",
+                code="whep_session_store_unavailable",
+                message="WHEP session store indisponivel.",
             ) from exc
-
-    def cleanup(self) -> None:
-        return None
 
     def _set(self, session_id: str, payload: dict[str, object], ttl_seconds: int) -> None:
         client = self._client()
         try:
-            client.set(self._key(session_id), json.dumps(payload), ex=ttl_seconds)
+            client.set(self._key(session_id), json.dumps(payload), ex=max(1, ttl_seconds))
         except RedisError as exc:
             raise http_error(
                 status_code=503,
-                code="session_store_unavailable",
-                message="Session store indisponivel.",
+                code="whep_session_store_unavailable",
+                message="WHEP session store indisponivel.",
             ) from exc
 
     def _get(self, session_id: str) -> dict[str, object] | None:
@@ -91,8 +95,8 @@ class SessionStore:
         except RedisError as exc:
             raise http_error(
                 status_code=503,
-                code="session_store_unavailable",
-                message="Session store indisponivel.",
+                code="whep_session_store_unavailable",
+                message="WHEP session store indisponivel.",
             ) from exc
         if raw is None:
             return None
@@ -102,13 +106,13 @@ class SessionStore:
             self.delete(session_id)
             raise http_error(
                 status_code=503,
-                code="session_store_invalid",
-                message="Session store invalido.",
+                code="whep_session_store_invalid",
+                message="WHEP session store invalido.",
             ) from exc
 
     @staticmethod
     def _key(session_id: str) -> str:
-        return f"{SESSION_PREFIX}{session_id}"
+        return f"{WHEP_SESSION_PREFIX}{session_id}"
 
     @staticmethod
     def _client():
@@ -116,7 +120,7 @@ class SessionStore:
         if client is None:
             raise http_error(
                 status_code=503,
-                code="session_store_unavailable",
-                message="Session store indisponivel.",
+                code="whep_session_store_unavailable",
+                message="WHEP session store indisponivel.",
             )
         return client
