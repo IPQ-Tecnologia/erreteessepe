@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from fastapi import HTTPException
 
 from app.core.http_errors import http_error
 from app.core.settings import settings
@@ -45,13 +44,21 @@ class StreamPreparationService:
         viewer_token: str | None = None,
     ) -> StreamResponse:
         if not validate_user_access(user_id, device_name):
-            raise HTTPException(status_code=403, detail="Denied access to this camera")
+            raise http_error(
+                status_code=403,
+                code="camera_access_denied",
+                message="Denied access to this camera",
+            )
 
         rtsp_source = self.get_rtsp_source(device_name)
 
         viewers = self._mediamtx.get_viewer_count(device_name)
         if viewers >= settings.max_viewers:
-            raise HTTPException(status_code=429, detail="Viewers limit reached")
+            raise http_error(
+                status_code=429,
+                code="viewers_limit_reached",
+                message="Viewers limit reached",
+            )
 
         path_info = self._mediamtx.get_path_info(device_name)
         if not path_info or not path_info.get("ready"):
@@ -113,9 +120,10 @@ class StreamPreparationService:
             }
 
         if not viewer_token:
-            raise HTTPException(
+            raise http_error(
                 status_code=401,
-                detail="Keycloak session missing or expired",
+                code="keycloak_session_missing_or_expired",
+                message="Keycloak session missing or expired",
             )
 
         return {
@@ -136,15 +144,17 @@ class StreamPreparationService:
             return servers
 
         if not settings.turn_public_ip:
-            raise HTTPException(
+            raise http_error(
                 status_code=500,
-                detail="TURN enabled without TURN_PUBLIC_IP configured",
+                code="turn_public_ip_missing",
+                message="TURN enabled without TURN_PUBLIC_IP configured",
             )
 
         if not settings.turn_username or not settings.turn_password:
-            raise HTTPException(
+            raise http_error(
                 status_code=500,
-                detail="TURN enabled without TURN_USERNAME/TURN_PASSWORD configured",
+                code="turn_credentials_missing",
+                message="TURN enabled without TURN_USERNAME/TURN_PASSWORD configured",
             )
 
         turn_base = f"turn:{settings.turn_public_ip}:{settings.turn_port}"

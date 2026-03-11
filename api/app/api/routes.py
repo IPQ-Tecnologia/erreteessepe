@@ -4,6 +4,7 @@ import time
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Response, status
 
+from app.core.http_errors import http_error
 from app.core.settings import settings
 from app.core.session_store import SessionStore
 from app.infrastructure.keycloak_client import KeycloakClient
@@ -21,14 +22,22 @@ SESSION_COOKIE_NAME = "stream_session"
 def _get_active_session(session_id: str | None):
     session = session_store.get(session_id)
     if not session:
-        raise HTTPException(status_code=401, detail="Sessao ausente ou expirada")
+        raise http_error(
+            status_code=401,
+            code="session_missing_or_expired",
+            message="Sessao ausente ou expirada",
+        )
     return session
 
 
 @router.post("/auth/login", response_model=LoginResponse)
 def login(payload: LoginRequest, response: Response):
     if settings.auth_provider != "keycloak":
-        raise HTTPException(status_code=400, detail="Login externo indisponivel")
+        raise http_error(
+            status_code=400,
+            code="external_login_unavailable",
+            message="Login externo indisponivel",
+        )
 
     token, expires_at = keycloak_client.issue_token_with_exp(payload.username, payload.password)
     session = session_store.create(payload.username, token, expires_at)
@@ -78,7 +87,11 @@ def get_stream(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Erro interno") from exc
+        raise http_error(
+            status_code=500,
+            code="internal_error",
+            message="Erro interno",
+        ) from exc
 
 
 @router.get("/api/stream/{camera}", response_model=StreamResponse)
@@ -89,11 +102,15 @@ def get_stream_by_query(
     viewer_token = None
     user_id = "anonymous"
 
-    print(f"Authorization header: {authorization}") 
+    print(f"Authorization header: {authorization}")
 
     if settings.auth_provider == "keycloak":
         if not authorization or not authorization.lower().startswith("bearer "):
-            raise HTTPException(status_code=401, detail="Token Bearer ausente")
+            raise http_error(
+                status_code=401,
+                code="bearer_token_missing",
+                message="Token Bearer ausente",
+            )
         viewer_token = authorization.split(" ", 1)[1]
         user_id = "bearer_user"
     print(f"Extracted viewer_token: {viewer_token}")
@@ -107,4 +124,8 @@ def get_stream_by_query(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Erro interno") from exc
+        raise http_error(
+            status_code=500,
+            code="internal_error",
+            message="Erro interno",
+        ) from exc

@@ -6,9 +6,9 @@ import threading
 import time
 
 import requests
-from fastapi import HTTPException
 from requests import RequestException
 
+from app.core.http_errors import http_error
 from app.core.settings import settings
 
 
@@ -58,23 +58,39 @@ class KeycloakClient:
         }
         response = self._request_token_with_retry(payload)
         if response.status_code != 200:
-            raise HTTPException(status_code=401, detail="Falha ao autenticar no Keycloak")
+            raise http_error(
+                status_code=401,
+                code="keycloak_auth_failed",
+                message="Falha ao autenticar no Keycloak",
+            )
 
         body = response.json()
         token = body.get("access_token")
         if not token:
-            raise HTTPException(status_code=401, detail="Token do Keycloak ausente")
+            raise http_error(
+                status_code=401,
+                code="keycloak_token_missing",
+                message="Token do Keycloak ausente",
+            )
 
         # In rare startup races, Keycloak can mint a token before JWKS propagation.
         # Retry once to return a token whose kid is already published.
         if not self._kid_is_known(token):
             response = self._request_token_with_retry(payload)
             if response.status_code != 200:
-                raise HTTPException(status_code=401, detail="Falha ao autenticar no Keycloak")
+                raise http_error(
+                    status_code=401,
+                    code="keycloak_auth_failed",
+                    message="Falha ao autenticar no Keycloak",
+                )
             body = response.json()
             token = body.get("access_token")
             if not token:
-                raise HTTPException(status_code=401, detail="Token do Keycloak ausente")
+                raise http_error(
+                    status_code=401,
+                    code="keycloak_token_missing",
+                    message="Token do Keycloak ausente",
+                )
 
         expires_at = self._extract_exp(token)
         if expires_at is None:
@@ -107,9 +123,10 @@ class KeycloakClient:
                 continue
             return response
 
-        raise HTTPException(
+        raise http_error(
             status_code=503,
-            detail="Keycloak indisponivel no momento",
+            code="keycloak_unavailable",
+            message="Keycloak indisponivel no momento",
         ) from last_error
 
     def _get_cached(self, cache_key: tuple[str, str]) -> tuple[str, int] | None:

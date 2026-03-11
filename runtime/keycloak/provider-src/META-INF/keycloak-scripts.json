@@ -1,0 +1,9 @@
+{
+  "mappers": [
+    {
+      "name": "mediamtx-permissions",
+      "fileName": "mediamtx-permissions-mapper.js",
+      "description": "Builds the mediamtx_permissions claim when the user has the teste-mediamtx role."
+    }
+  ]
+}
