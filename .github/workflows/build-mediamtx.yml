@@ -49,8 +49,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: true
-          DEFAULT_BUMP: minor
-          RELEASE_BRANCHES: develop
+          DEFAULT_BUMP: patch
 
       - name: Set Python ${{ matrix.python-version }} environment
         uses: actions/setup-python@v5
