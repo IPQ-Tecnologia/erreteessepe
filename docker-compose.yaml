@@ -1,0 +1,69 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: stream-redis
+    restart: unless-stopped
+
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:26.2.5
+  #   container_name: keycloak
+  #   restart: unless-stopped
+  #   command: ["start-dev", "--import-realm"]
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     KEYCLOAK_ADMIN: admin
+  #     KEYCLOAK_ADMIN_PASSWORD: admin
+  #     KC_HOSTNAME: http://localhost:8080
+  #   volumes:
+  #     - ./runtime/keycloak/realm-mediamtx.json:/opt/keycloak/data/import/realm-mediamtx.json:ro
+  #   healthcheck:
+  #     test:
+  #       - CMD-SHELL
+  #       - >
+  #         bash -lc "exec 3<>/dev/tcp/127.0.0.1/8080;
+  #         echo -e 'GET /realms/mediamtx/protocol/openid-connect/certs HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+  #         head -n 1 <&3 | grep -q '200 OK'"
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 20
+  #     start_period: 5s
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.15.4
+    container_name: mediamtx
+    restart: unless-stopped
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_WEBRTC_HOST:-localhost}
+      MTX_AUTHJWTJWKS: http://api:8000/.well-known/jwks.json
+    ports:
+      - "8554:8554"      # RTSP
+      - "8888:8888"      # HLS fallback
+      - "8889:8889"      # WebRTC
+      - "8189:8189/udp"  # ICE / WebRTC UDP
+      - "8189:8189/tcp"  # ICE / WebRTC TCP fallback
+      - "9997:9997"      # API MediaMTX
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: stream-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      mediamtx:
+        condition: service_started
+      redis:
+        condition: service_started
+    env_file:
+      - ./.env
+    environment:
+      # Container-to-container DNS for Docker network.
+      MEDIAMTX_HOST: mediamtx
+      MEDIAMTX_API: http://mediamtx:9997
+      CAMERA_REDIS_URL: ${CAMERA_REDIS_URL:-redis://redis:6379/0}
+      KEYCLOAK_BASE_URL: ${KEYCLOAK_BASE_URL:-http://keycloak:8080}

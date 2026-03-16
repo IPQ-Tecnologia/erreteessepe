@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Monitoramento WebRTC</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #10151f;
+            color: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 420px;
+            background: #172233;
+            border: 1px solid #24364f;
+            border-radius: 10px;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 14px;
+            font-size: 1.4rem;
+            color: #ffffff;
+        }
+
+        p {
+            margin-top: 0;
+            color: #9eb0c7;
+            font-size: 0.95rem;
+        }
+
+        .field {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid #2f4767;
+            background-color: #0e1724;
+            color: #e8eef7;
+            font-size: 15px;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 14px;
+            padding: 11px 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #2b87ff;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #status {
+            min-height: 20px;
+            margin-top: 12px;
+            font-size: 0.9rem;
+            color: #9eb0c7;
+        }
+
+        .error {
+            color: #ff7f7f !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Entrar</h1>
+        <p>Faça login com sua conta do Keycloak para acessar as câmeras.</p>
+        <input id="username" class="field" type="text" placeholder="Usuário" autocomplete="username">
+        <input id="password" class="field" type="password" placeholder="Senha" autocomplete="current-password">
+        <button id="loginBtn" type="button">ACESSAR</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const usernameEl = document.getElementById('username');
+        const passwordEl = document.getElementById('password');
+        const loginBtn = document.getElementById('loginBtn');
+        const statusEl = document.getElementById('status');
+
+        function setStatus(message, isError = false) {
+            statusEl.textContent = message;
+            statusEl.className = isError ? 'error' : '';
+        }
+
+        async function login() {
+            const username = usernameEl.value.trim();
+            const password = passwordEl.value;
+            if (!username || !password) {
+                setStatus('Informe usuário e senha.', true);
+                return;
+            }
+
+            loginBtn.disabled = true;
+            setStatus('Validando sessão...');
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Usuário ou senha inválidos');
+                }
+
+                window.location.href = '/player';
+            } catch (error) {
+                setStatus(error.message || 'Falha ao autenticar.', true);
+            } finally {
+                loginBtn.disabled = false;
+            }
+        }
+
+        loginBtn.addEventListener('click', login);
+        passwordEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                login();
+            }
+        });
+
+        fetch('/auth/me', { credentials: 'include' })
+            .then((response) => response.ok ? response.json() : null)
+            .then((payload) => {
+                if (payload && payload.authenticated) {
+                    window.location.href = '/player';
+                }
+            })
+            .catch(() => null);
+    </script>
+</body>
+</html>
