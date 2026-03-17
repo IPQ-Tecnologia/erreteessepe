@@ -37,6 +37,10 @@ class Settings:
     camera_redis_url: str
     camera_redis_prefix: str
     camera_redis_timeout_seconds: float
+    camera_default_manufacturer: str
+    camera_default_port: int
+    camera_default_channel: int
+    camera_default_subtype: int
     rtsp_port: int
     webrtc_port: int
     mediamtx_api_user: str
@@ -86,6 +90,10 @@ settings = Settings(
     camera_redis_url=os.getenv("CAMERA_REDIS_URL", "").strip(),
     camera_redis_prefix=os.getenv("CAMERA_REDIS_PREFIX", "camera:"),
     camera_redis_timeout_seconds=float(os.getenv("CAMERA_REDIS_TIMEOUT_SECONDS", "2")),
+    camera_default_manufacturer=_env_text("CAMERA_DEFAULT_MANUFACTURER", "dahua"),
+    camera_default_port=int(os.getenv("CAMERA_DEFAULT_PORT", "554")),
+    camera_default_channel=int(os.getenv("CAMERA_DEFAULT_CHANNEL", "1")),
+    camera_default_subtype=int(os.getenv("CAMERA_DEFAULT_SUBTYPE", "0")),
     rtsp_port=int(os.getenv("RTSP_PORT", "8554")),
     webrtc_port=int(os.getenv("WEBRTC_PORT", "8889")),
     mediamtx_api_user=os.getenv("MEDIAMTX_API_USER", "backend"),

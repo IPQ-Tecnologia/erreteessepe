@@ -10,6 +10,12 @@ from app.domain.camera_catalog import CameraDefinition
 from app.domain.cameras import CAMERAS
 from app.infrastructure.redis_client import Redis, RedisError, redis_client
 
+try:
+    from redis.exceptions import ResponseError
+except ImportError:
+    class ResponseError(Exception):
+        pass
+
 
 class CameraCatalog:
     def __init__(self) -> None:
@@ -60,7 +66,10 @@ class CameraCatalog:
         key = f"{settings.camera_redis_prefix}{device_name}"
 
         try:
-            raw_value = client.get(key)
+            try:
+                raw_value = client.get(key)
+            except ResponseError:
+                raw_value = None
             if raw_value is not None:
                 payload = json.loads(self._decode(raw_value))
                 return self._from_mapping(device_name, payload)
@@ -88,16 +97,55 @@ class CameraCatalog:
         return None
 
     def _from_mapping(self, device_name: str, payload: dict[str, Any]) -> CameraDefinition:
-        manufacturer = self._required_value(payload, "manufacturer", "fabricante")
-        host = self._required_value(payload, "ip", "host")
-        username = self._required_value(payload, "username", "usuario", "user")
-        password = self._required_value(payload, "password", "senha", "pass")
+        manufacturer = (
+            self._optional_value(payload, "manufacturer", "fabricante", "brand", "vendor")
+            or settings.camera_default_manufacturer
+        )
+        host = self._required_value(payload, "ip", "host", "ip_address", "ipAddress")
+        username = self._required_value(
+            payload,
+            "username",
+            "usuario",
+            "user",
+            "login",
+        )
+        password = self._required_value(
+            payload,
+            "password",
+            "senha",
+            "pass",
+            "passwd",
+        )
 
-        port = self._int_value(payload, "port", default=554)
-        channel = self._int_value(payload, "channel", default=1)
-        subtype = self._int_value(payload, "subtype", default=0)
-        rtsp_path = self._optional_value(payload, "rtsp_path", "path")
-        rtsp_url = self._optional_value(payload, "rtsp_url", "url")
+        port = self._int_value(
+            payload,
+            "port",
+            "rtsp_port",
+            "rtspPort",
+            default=settings.camera_default_port,
+        )
+        channel = self._int_value(
+            payload,
+            "channel",
+            "canal",
+            default=settings.camera_default_channel,
+        )
+        subtype = self._int_value(
+            payload,
+            "subtype",
+            "sub_type",
+            "subType",
+            default=settings.camera_default_subtype,
+        )
+        rtsp_path = self._optional_value(payload, "rtsp_path", "rtspPath", "path")
+        rtsp_url = self._optional_value(payload, "rtsp_url", "rtspUrl", "url")
+
+        if not manufacturer:
+            raise http_error(
+                status_code=502,
+                code="camera_catalog_invalid",
+                message="Invalid camera registration. Required field missing: manufacturer.",
+            )
 
         return CameraDefinition(
             device_name=device_name,
@@ -168,9 +216,9 @@ class CameraCatalog:
         return None
 
     @staticmethod
-    def _int_value(payload: dict[str, Any], key: str, default: int) -> int:
-        value = payload.get(key)
-        if value in (None, ""):
+    def _int_value(payload: dict[str, Any], *keys: str, default: int) -> int:
+        value = CameraCatalog._optional_value(payload, *keys)
+        if value is None:
             return default
         try:
             return int(value)
@@ -178,5 +226,5 @@ class CameraCatalog:
             raise http_error(
                 status_code=502,
                 code="camera_catalog_invalid",
-                message=f"Field '{key}' is invalid in camera registration.",
+                message=f"Field '{keys[0]}' is invalid in camera registration.",
             ) from exc

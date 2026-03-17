@@ -105,6 +105,7 @@ class StreamPreparationService:
     def get_rtsp_source(self, device_name: str) -> str:
         camera = self._camera_catalog.get(device_name)
         rtsp = build_rtsp_url(camera)
+        print("Built RTSP URL for '%s': %s", device_name, rtsp)
         if not rtsp:
             raise http_error(
                 status_code=502,
