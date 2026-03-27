@@ -132,4 +132,5 @@ settings = Settings(
         os.getenv("MEDIAMTX_API_TOKEN_TTL_SECONDS", "60")
     ),
     mediamtx_admin_subject=_env_text("MEDIAMTX_ADMIN_SUBJECT", "mediamtx-admin"),
+    whep_url=os.getenv("WHEP_URL", "").strip(),
 )

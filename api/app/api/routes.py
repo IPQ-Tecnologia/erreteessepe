@@ -24,6 +24,12 @@ external_jwt_verifier = ExternalJWTVerifier()
 whep_proxy = WHEPProxy()
 SESSION_COOKIE_NAME = "stream_session"
 
+def _resolve_whep_url(device_name: str) -> str:
+    path = str(router.url_path_for("whep_offer", device_name=device_name))
+    if settings.whep_url:
+        return settings.whep_url.rstrip("/") + path
+    return path
+
 
 def _get_active_session(session_id: str | None):
     session = session_store.get(session_id)
@@ -165,7 +171,7 @@ def get_stream_by_query(
         return service.prepare_stream(
             principal=principal,
             device_name=camera,
-            whep_url=str(request.url_for("whep_offer", device_name=camera)),
+            whep_url=_resolve_whep_url(camera),
             client_auth_type="bearer",
         )
     except HTTPException:
