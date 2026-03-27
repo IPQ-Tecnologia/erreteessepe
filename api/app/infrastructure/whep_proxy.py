@@ -146,4 +146,4 @@ class WHEPProxy:
 
     @staticmethod
     def _upstream_offer_url(device_name: str) -> str:
-        return f"http://{settings.mediamtx_host}:{settings.webrtc_port}/{device_name}/whep"
+        return f"{settings.mediamtx_host}:{settings.webrtc_port}/{device_name}/whep"
