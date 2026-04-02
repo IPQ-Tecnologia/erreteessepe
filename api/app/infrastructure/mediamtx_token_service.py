@@ -93,16 +93,25 @@ class MediaMTXTokenService:
     @staticmethod
     def _load_or_generate_private_key():
         pem = settings.mediamtx_jwt_private_key
+        if pem:
+            print("Loading MediaMTX JWT private key from environment variable.")
+            print(f"pem: {pem}")
+        else:
+            print("No MediaMTX JWT private key in environment variable.")
+        print(f"MediaMTX JWT private key path: {settings.mediamtx_jwt_private_key_path}")
         if not pem and settings.mediamtx_jwt_private_key_path:
+            print("Attempting to load MediaMTX JWT private key from file.")
             with open(settings.mediamtx_jwt_private_key_path, "rb") as handle:
                 pem = handle.read().decode("utf-8")
 
         if pem:
+            print("MediaMTX JWT private key loaded successfully.")
             return serialization.load_pem_private_key(
                 pem.replace("\\n", "\n").encode("utf-8"),
                 password=None,
             )
 
+        print("No MediaMTX JWT private key found. Generating new RSA key pair.")
         return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     @staticmethod
