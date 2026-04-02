@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
@@ -15,6 +16,8 @@ try:
 except ImportError:
     class ResponseError(Exception):
         pass
+
+logger = logging.getLogger(__name__)
 
 
 class CameraCatalog:
@@ -50,7 +53,11 @@ class CameraCatalog:
             for raw_key in client.scan_iter(match=f"{settings.camera_redis_prefix}*"):
                 key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
                 known.add(key.removeprefix(settings.camera_redis_prefix))
-        except RedisError:
+        except RedisError as exc:
+            logger.warning(
+                "Failed to list camera IDs from Redis",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             return known
 
         return known
@@ -68,7 +75,12 @@ class CameraCatalog:
         try:
             try:
                 raw_value = client.get(key)
-            except ResponseError:
+            except ResponseError as exc:
+                logger.warning(
+                    "Camera catalog key %s could not be read as a Redis string, falling back to hash lookup",
+                    key,
+                    exc_info=(type(exc), exc, exc.__traceback__),
+                )
                 raw_value = None
             if raw_value is not None:
                 payload = json.loads(self._decode(raw_value))

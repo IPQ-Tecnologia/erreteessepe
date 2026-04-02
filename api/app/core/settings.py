@@ -43,6 +43,7 @@ class Settings:
     camera_default_subtype: int
     rtsp_port: int
     webrtc_port: int
+    whep_url: str
     mediamtx_api_user: str
     mediamtx_api_pass: str
     webrtc_user: str
@@ -96,6 +97,7 @@ settings = Settings(
     camera_default_subtype=int(os.getenv("CAMERA_DEFAULT_SUBTYPE", "0")),
     rtsp_port=int(os.getenv("RTSP_PORT", "8554")),
     webrtc_port=int(os.getenv("WEBRTC_PORT", "8889")),
+    whep_url=os.getenv("WHEP_URL", "").strip(),
     mediamtx_api_user=os.getenv("MEDIAMTX_API_USER", "backend"),
     mediamtx_api_pass=os.getenv("MEDIAMTX_API_PASS", "backendpassword"),
     webrtc_user=os.getenv("WEBRTC_USER", "viewer"),
@@ -132,5 +134,4 @@ settings = Settings(
         os.getenv("MEDIAMTX_API_TOKEN_TTL_SECONDS", "60")
     ),
     mediamtx_admin_subject=_env_text("MEDIAMTX_ADMIN_SUBJECT", "mediamtx-admin"),
-    whep_url=os.getenv("WHEP_URL", "").strip(),
 )

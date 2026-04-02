@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import requests
 from requests import RequestException
@@ -146,4 +146,23 @@ class WHEPProxy:
 
     @staticmethod
     def _upstream_offer_url(device_name: str) -> str:
-        return f"{settings.mediamtx_host}:{settings.webrtc_port}/{device_name}/whep"
+        base = settings.mediamtx_host.strip().rstrip("/")
+        if "://" not in base:
+            base = f"http://{base}"
+
+        parsed = urlsplit(base)
+        netloc = parsed.netloc or parsed.path
+        path = parsed.path if parsed.netloc else ""
+        if ":" not in netloc.rsplit("@", 1)[-1]:
+            netloc = f"{netloc}:{settings.webrtc_port}"
+
+        upstream_base = urlunsplit(
+            (
+                parsed.scheme or "http",
+                netloc,
+                path.rstrip("/"),
+                "",
+                "",
+            )
+        )
+        return f"{upstream_base}/{device_name}/whep"

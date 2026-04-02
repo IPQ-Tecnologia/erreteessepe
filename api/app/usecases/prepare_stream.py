@@ -105,7 +105,7 @@ class StreamPreparationService:
     def get_rtsp_source(self, device_name: str) -> str:
         camera = self._camera_catalog.get(device_name)
         rtsp = build_rtsp_url(camera)
-        print("Built RTSP URL for '%s': %s", device_name, rtsp)
+        self._logger.info("Built RTSP URL for '%s': %s", device_name, rtsp)
         if not rtsp:
             raise http_error(
                 status_code=502,
@@ -187,7 +187,7 @@ class StreamPreparationService:
 
         return servers
 
-    def _cleanup_loop(self) -> None:
+    def _cleanup_loop(self) -> None: # verify if this is needed since mediamtx can be configured to auto-remove idle paths
         interval = max(2, settings.idle_room_cleanup_seconds)
         while True:
             time.sleep(interval)
@@ -204,7 +204,7 @@ class StreamPreparationService:
                         with self._cleanup_lock:
                             self._managed_paths.discard(device_name)
                 except Exception as exc:
-                    self._logger.warning(
+                    self._logger.exception(
                         "Idle cleanup check failed for %s: %s",
                         device_name,
                         exc,

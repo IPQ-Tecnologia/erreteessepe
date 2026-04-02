@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from urllib.parse import urlsplit
 
 from app.core.http_errors import http_error
+
+logger = logging.getLogger(__name__)
 
 
 class RTSPProbe:
@@ -22,6 +25,7 @@ class RTSPProbe:
             )
 
         if not shutil.which(self._ffprobe_bin):
+            logger.warning("RTSP probe skipped because %s was not found", self._ffprobe_bin)
             return
 
         command = [
@@ -53,6 +57,11 @@ class RTSPProbe:
                 message="The camera is offline or not responding on the network.",
             ) from exc
         except OSError:
+            logger.warning(
+                "RTSP probe skipped due to OS error when invoking %s",
+                self._ffprobe_bin,
+                exc_info=True,
+            )
             return
 
         if result.returncode == 0:

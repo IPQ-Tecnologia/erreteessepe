@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 
 import requests
@@ -9,6 +10,8 @@ from app.core.http_errors import http_error
 from app.core.settings import settings
 from app.infrastructure.keycloak_client import KeycloakClient
 from app.infrastructure.mediamtx_token_service import MediaMTXTokenService
+
+logger = logging.getLogger(__name__)
 
 
 class MediaMTXClient:
@@ -110,9 +113,19 @@ class MediaMTXClient:
                 headers=self._auth_headers(),
                 timeout=self._timeout,
             )
-        except RequestException:
+        except RequestException as exc:
+            logger.warning(
+                "MediaMTX viewer count request failed for %s",
+                device_name,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             return 0
         if response.status_code != 200:
+            logger.warning(
+                "MediaMTX viewer count request returned status=%s for %s",
+                response.status_code,
+                device_name,
+            )
             return 0
 
         data = response.json()

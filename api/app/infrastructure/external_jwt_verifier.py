@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 
@@ -13,6 +14,8 @@ from requests import RequestException
 
 from app.core.http_errors import http_error
 from app.core.settings import settings
+
+logger = logging.getLogger(__name__)
 
 # essa classe serve para verificar se o token jwt que recebi é válido no keycloak que temos externamente
 class ExternalJWTVerifier:
@@ -68,6 +71,10 @@ class ExternalJWTVerifier:
             self._refresh_jwks()
         except HTTPException:
             if self._static_key is not None:
+                logger.warning(
+                    "External JWKS refresh failed, falling back to static certificate key",
+                    exc_info=True,
+                )
                 return self._static_key
             raise
 

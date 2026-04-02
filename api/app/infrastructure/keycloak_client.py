@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import threading
 import time
 
@@ -10,6 +11,8 @@ from fastapi import HTTPException
 from requests import RequestException
 
 from app.core.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 class KeycloakClient:
@@ -94,6 +97,12 @@ class KeycloakClient:
                 response = requests.post(self._token_url, data=payload, timeout=self._timeout)
             except RequestException as exc:
                 last_error = exc
+                logger.warning(
+                    "Keycloak token request failed on attempt %s/%s",
+                    attempt + 1,
+                    self._max_attempts,
+                    exc_info=(type(exc), exc, exc.__traceback__),
+                )
                 if attempt == self._max_attempts - 1:
                     break
                 time.sleep(delay_seconds)
@@ -102,6 +111,12 @@ class KeycloakClient:
 
             # Retry temporary server-side failures that happen during startup.
             if response.status_code in (502, 503, 504) and attempt < self._max_attempts - 1:
+                logger.warning(
+                    "Keycloak token request returned retryable status=%s on attempt %s/%s",
+                    response.status_code,
+                    attempt + 1,
+                    self._max_attempts,
+                )
                 time.sleep(delay_seconds)
                 delay_seconds *= 1.8
                 continue
@@ -167,15 +182,27 @@ class KeycloakClient:
 
         try:
             response = requests.get(self._jwks_url, timeout=self._timeout)
-        except RequestException:
+        except RequestException as exc:
+            logger.warning(
+                "Keycloak JWKS fetch failed while checking token kid",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             # If JWKS is temporarily unreachable, don't fail token issuance here.
             return True
         if response.status_code != 200:
+            logger.warning(
+                "Keycloak JWKS fetch returned status=%s while checking token kid",
+                response.status_code,
+            )
             return True
 
         try:
             keys = response.json().get("keys", [])
-        except ValueError:
+        except ValueError as exc:
+            logger.warning(
+                "Keycloak JWKS response was not valid JSON while checking token kid",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             return True
         if not isinstance(keys, list):
             return True
