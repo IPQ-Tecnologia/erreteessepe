@@ -1,0 +1,50 @@
+{
+  "updated_at": "2026-02-24T13:09:19.347650+00:00",
+  "cameras": {
+    "cam1": {
+      "camera_id": "cam1",
+      "state": "restarting",
+      "online": false,
+      "message": "retrying in 30s",
+      "updated_at": "2026-02-24T13:09:19.347633+00:00",
+      "room_name": "camera-cam1",
+      "ingress_id": "IN_Vrbbs33ScCcw",
+      "whip_url": "http://livekit-ingress:8080/whip/UTPeVWAfGnvx",
+      "codec": "unknown",
+      "mode": "transcode",
+      "last_error": "Cannot connect to host localhost:7880 ssl:default [Connect call failed ('127.0.0.1', 7880)]",
+      "publish_url": "rtmp://192.168.202.239:1935/rtmp/azLTBuqtCrUA",
+      "publish_protocol": "rtmp"
+    },
+    "cam2": {
+      "camera_id": "cam2",
+      "state": "restarting",
+      "online": false,
+      "message": "retrying in 30s",
+      "updated_at": "2026-02-24T13:09:19.332262+00:00",
+      "room_name": "camera-cam2",
+      "ingress_id": "IN_NcDLWAWX82Gn",
+      "whip_url": "http://livekit-ingress:8080/whip/2T56xnNNzsuV",
+      "codec": "unknown",
+      "mode": "transcode",
+      "last_error": "Cannot connect to host localhost:7880 ssl:default [Connect call failed ('127.0.0.1', 7880)]",
+      "publish_url": "rtmp://192.168.202.239:1935/rtmp/2orvNLJvPMq3",
+      "publish_protocol": "rtmp"
+    },
+    "dss": {
+      "camera_id": "dss",
+      "state": "restarting",
+      "online": false,
+      "message": "retrying in 30s",
+      "updated_at": "2026-02-24T13:09:19.339075+00:00",
+      "room_name": "camera-dss",
+      "ingress_id": "IN_Uvomi7rKGDqj",
+      "whip_url": "http://livekit-ingress:8080/whip/pbFLx6iNBQtU",
+      "codec": "unknown",
+      "mode": "transcode",
+      "last_error": "Cannot connect to host localhost:7880 ssl:default [Connect call failed ('127.0.0.1', 7880)]",
+      "publish_url": "rtmp://192.168.202.239:1935/rtmp/tMB2BmpGsm4K",
+      "publish_protocol": "rtmp"
+    }
+  }
+}

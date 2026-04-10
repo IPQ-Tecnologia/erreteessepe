@@ -1,0 +1,45 @@
+services:
+  keycloak:
+    #image: keycloak/keycloak:26.0.6
+    image: quay.io/keycloak/keycloak:26.5.4
+    container_name: keycloak-tatico
+    restart: always
+    ports:
+     - "8080:8080"
+     - "8443:8443"
+     - "9000:9000"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "secret"
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
+
+      KC_HOSTNAME_ADMIN_URL: http://localhost:8080
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgresql:5432/keycloak
+      #KC_DB_URL_HOST: postgres
+      KC_DB_USERNAME: root
+      KC_DB_PASSWORD: "200418"
+      KC_FEATURE: hostnamev2
+      #KC_FEATURES: account3
+      #KC_PII_ENCKEY: d7705f27269fe79c5aa65e93a6f7216d
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: true
+      HTTP_ADDRESS_FORWARDING: true
+      PROXY_ADDRESS_FORWARDING: true
+    command: 
+      - start 
+      - --proxy-headers 
+      - forwarded 
+      - --hostname-strict=false 
+      #- --optimized
+    
+#    volumes:
+#      - keycloak_data:./focorj/keycloak_data/secrets
+#    secrets:
+#      - keycloak_password 
+#      - keycloak_db_password

@@ -1,0 +1,22 @@
+{
+  "itemCount": 1,
+  "pageCount": 1,
+  "items": [
+    {
+      "name": "camera02",
+      "confName": "camera02",
+      "source": { "type": "rtspSource", "id": "" },
+      "ready": true,
+      "readyTime": "2026-02-27T16:19:38.865670833Z",
+      "tracks": ["H265"],
+      "bytesReceived": 2735950,
+      "bytesSent": 2735950,
+      "readers": [
+        {
+          "type": "webRTCSession",
+          "id": "a6e3a637-a284-486a-8947-8a836d50134f"
+        }
+      ]
+    }
+  ]
+}

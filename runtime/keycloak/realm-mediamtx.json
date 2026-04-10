@@ -1,0 +1,74 @@
+{
+  "realm": "mediamtx",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "stream:read"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "mediamtx",
+      "name": "MediaMTX",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "mediamtx-dev-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "viewer",
+      "enabled": true,
+      "firstName": "Stream",
+      "lastName": "Viewer",
+      "email": "viewer@mediamtx.local",
+      "emailVerified": true,
+      "realmRoles": [
+        "stream:read"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer123",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "backend",
+      "enabled": true,
+      "firstName": "Stream",
+      "lastName": "Backend",
+      "email": "backend@mediamtx.local",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "backendpassword",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
