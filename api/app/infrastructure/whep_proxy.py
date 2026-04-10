@@ -100,9 +100,6 @@ class WHEPProxy:
     def get_session(self, session_id: str | None) -> WHEPSession | None:
         return self._session_store.get(session_id)
 
-    def delete_session(self, session_id: str | None) -> None:
-        self._session_store.delete(session_id)
-
     def _request(
         self,
         method: str,

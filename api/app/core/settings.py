@@ -41,7 +41,6 @@ class Settings:
     camera_default_port: int
     camera_default_channel: int
     camera_default_subtype: int
-    rtsp_port: int
     webrtc_port: int
     whep_url: str
     mediamtx_api_user: str
@@ -58,7 +57,6 @@ class Settings:
     max_viewers: int
     mediamtx_ready_timeout_seconds: float
     idle_room_cleanup_seconds: int
-    mediamtx_source_close_after: str
     keycloak_base_url: str
     keycloak_realm: str
     keycloak_client_id: str
@@ -95,7 +93,6 @@ settings = Settings(
     camera_default_port=int(os.getenv("CAMERA_DEFAULT_PORT", "554")),
     camera_default_channel=int(os.getenv("CAMERA_DEFAULT_CHANNEL", "1")),
     camera_default_subtype=int(os.getenv("CAMERA_DEFAULT_SUBTYPE", "0")),
-    rtsp_port=int(os.getenv("RTSP_PORT", "8554")),
     webrtc_port=int(os.getenv("WEBRTC_PORT", "8889")),
     whep_url=os.getenv("WHEP_URL", "").strip(),
     mediamtx_api_user=os.getenv("MEDIAMTX_API_USER", "backend"),
@@ -112,7 +109,6 @@ settings = Settings(
     max_viewers=int(os.getenv("MAX_VIEWERS", "20")),
     mediamtx_ready_timeout_seconds=float(os.getenv("MEDIAMTX_READY_TIMEOUT_SECONDS", "20")),
     idle_room_cleanup_seconds=int(os.getenv("IDLE_ROOM_CLEANUP_SECONDS", "20")),
-    mediamtx_source_close_after=os.getenv("MEDIAMTX_SOURCE_CLOSE_AFTER", "20s"),
     keycloak_base_url=_keycloak_base_url,
     keycloak_realm=_keycloak_realm,
     keycloak_client_id=_keycloak_client_id,

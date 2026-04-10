@@ -70,9 +70,6 @@ class SessionStore:
                 message="Session store indisponivel.",
             ) from exc
 
-    def cleanup(self) -> None:
-        return None
-
     def _set(self, session_id: str, payload: dict[str, object], ttl_seconds: int) -> None:
         client = self._client()
         try:
